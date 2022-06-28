@@ -98,7 +98,7 @@ def r2(x, y, adj_r2=True):
         return r2
     
     
-def beta(x, y):
+def beta(x, y, r2=False, adj_r2=True):
     """Compute beta coefficients for Regression of predictor(s) x on target y. 
     Requires numpy arrays with columns as predictors/target.
 
@@ -112,7 +112,18 @@ def beta(x, y):
     
     X = np.c_[x, np.ones(x.shape[0])] 
     beta = np.linalg.pinv((X.T).dot(X)).dot(X.T.dot(y))
-    return beta[:-1].flatten()
+    if r2==False:
+        return beta[:-1].flatten()
+    else:
+        y_hat = np.dot(X, beta)
+        ss_res = np.sum((y-y_hat)**2)       
+        ss_tot = np.sum((y-np.mean(y))**2)   
+        r2 = 1 - ss_res / ss_tot  
+        if adj_r2:
+            r2a = 1 - (1-r2) * (len(y)-1) / (len(y)-x.shape[1]-1)
+            return beta[:-1].flatten(), r2a
+        else:
+            return beta[:-1].flatten(), r2
     
 
 def residuals(x, y):
@@ -177,7 +188,8 @@ def dominance(x, y, adj_r2=False, verbose=True):
             reduced_list = [del_from_tuple(comb, j_node) for comb in j_node_sel]
             diff_values = [rsqs[j_node_sel[i]] - rsqs[reduced_list[i]] for i in range(len(reduced_list))]
             dom_stats["partial"][j_node,i] = np.mean(diff_values)
-                
+    #dom_stats["partial"] = dom_stats["partial"].mean(axis=1)
+
     # total dominance
     if verbose: lgr.info("Calculating total dominance.")
     dom_stats["total"] = np.mean(np.c_[dom_stats["individual"].T, dom_stats["partial"]], axis=1)

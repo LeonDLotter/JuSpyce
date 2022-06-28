@@ -7,8 +7,8 @@ import pickle
 
 import numpy as np
 import pandas as pd
+from joblib import Parallel, delayed
 from pingouin import compute_effsize
-from sympy import true
 from tqdm.auto import tqdm
 
 from .datasets import get_template
@@ -32,7 +32,7 @@ class JuSpyce:
                  parcellation_labels=None, parcellation_space="MNI152", 
                  parcellation_hemi=["L", "R"], parcellation_density="10k",
                  drop_nan=False,
-                 n_proc=-1
+                 n_proc=1
                  ):
         
         self.x = x
@@ -274,11 +274,14 @@ class JuSpyce:
 
     def predict(self, method, adjust_r2=True, r_to_z=True, 
                 X=None, Y=None, Z=None, 
-                store=True, verbose=True):
+                store=True, verbose=True, n_proc=None):
         
         ## check if fit was run
         if not (hasattr(self, "X") | hasattr(self, "Y")):
             lgr.error("Input data ('X', 'Y') not found. Did you run CMC.fit()?!")
+        
+        # number of runners
+        n_proc = self.n_proc if n_proc is None else n_proc
         
         ## overwrite settings from main CMC
         self.r_to_z = r_to_z
@@ -290,73 +293,106 @@ class JuSpyce:
         Z = self.Z if Z is None else Z
         
         # array to store results
-        predictions = np.zeros((self.n_targets, self.n_predictors))
+        #predictions = np.zeros((self.n_targets, self.n_predictors))
         
         # boolean vector to exlude nan parcels
         no_nan = np.array(~self._nan_bool)
         
-        # iterate y (subjects)
-        #for y in tqdm(range(self.n_targets), desc=f"Calculating predictions ({method})", disable=not verbose):
+        ## function to perform prediction target-wise (= per subject), needed for parallelization
         def y_predict(y):    
-                
+            
             ## case pearson / case spearman
             if method in ["pearson", "spearman"]:
                 rank = True if method=="spearman" else False
-                predictions[y,:] = corr(x=X.values[:,no_nan], # atlas
+                predictions = corr(x=X.values[:,no_nan], # atlas
                                         y=Y.iloc[y:y+1,no_nan].values, # subjects
                                         correlate="rows", 
                                         rank=rank)[-1,:-1]
                 if r_to_z:
-                    predictions[y,:] = np.arctanh(predictions[y,:])   
+                    predictions = np.arctanh(predictions)   
                     
             ## case partialpearson / case partialspearman
             elif method in ["partialpearson", "partialspearman"]:
                 rank = True if method=="partialspearman" else False
                 # iterate x (atlases/predictors)
+                predictions = np.zeros(self.n_predictors)
                 for x in range(self.n_predictors):
-                    predictions[y,x] = partialcorr3(x=X.iloc[x,no_nan].values.T, # atlas
+                    predictions[x] = partialcorr3(x=X.iloc[x,no_nan].values.T, # atlas
                                                     y=Y.iloc[y,no_nan].values.T, # subject
                                                     z=Z.values[:,no_nan].T, # data to partial out
                                                     rank=rank)
                 if r_to_z:
-                    predictions[y,:] = np.arctanh(predictions[y,:])
+                    predictions = np.arctanh(predictions)
                 
             ## case slr
             elif method=="slr":
                 # iterate x (atlases/predictors)
+                predictions = np.zeros(self.n_predictors)
                 for x in range(self.n_predictors):
-                    predictions[y,x] = r2(x=X.iloc[x:x+1,no_nan].values.T, # atlas
+                    predictions[x] = r2(x=X.iloc[x:x+1,no_nan].values.T, # atlas
                                         y=Y.iloc[y:y+1,no_nan].values.T, # subject
                                         adj_r2=self.adj_r2)
             ## case mlr
             elif method=="mlr":
-                predictions[y,:] = beta(x=X.values[:,no_nan].T, # atlases
-                                        y=Y.iloc[y:y+1,no_nan].values.T) # subject                           
+                predictions = dict()
+                predictions["beta"], predictions["full_r2"] = beta(x=X.values[:,no_nan].T, # atlases
+                                                                   y=Y.iloc[y:y+1,no_nan].values.T, # subject      
+                                                                   r2=True,
+                                                                   adj_r2=self.adj_r2)                      
             ## case dominance
             elif method=="dominance":
-                predictions[y,:] = dominance(x=X.values[:,no_nan].T, # atlases
-                                             y=Y.iloc[y:y+1,no_nan].values.T, # subject   
-                                             adj_r2=self.adj_r2,
-                                             verbose=True if verbose=="debug" else False)["total"] # total dominance values
+                predictions = dominance(x=X.values[:,no_nan].T, # atlases
+                                        y=Y.iloc[y:y+1,no_nan].values.T, # subject   
+                                        adj_r2=self.adj_r2,
+                                        verbose=True if verbose=="debug" else False) # dict with dom stats
             ## case not defined
             else:
                 lgr.error(f"Prediction method '{method}' not defined!")
-                
-        pool_result = Parallel(n_jobs=i)(delayed(fill_array)(i) for i in range(0,100000))
+            ## return for collection
+            return(predictions)
+    
+        ## run actual prediction using joblib.Parallel
+        predictions_list = Parallel(n_jobs=n_proc)(delayed(y_predict)(y) for y in tqdm(
+            range(self.n_targets), desc=f"Predicting ({method}, {n_proc} proc)", disable=not verbose))
+        
+        ## collect data in arrays
+        # dominance: dict with one array per dominance stat
+        if method=="dominance":
+            predictions = dict()
+            for dom_stat in ["total", "individual", "relative"]:
+                predictions["dominance_"+dom_stat] = np.zeros((self.n_targets, self.n_predictors))
+                for y, prediction in enumerate(predictions_list):
+                    predictions["dominance_"+dom_stat][y,:] = prediction[dom_stat]
+            predictions["dominance_full_r2"] = np.sum(predictions["dominance_total"], axis=1)[:,np.newaxis]
+        # MLR: dict with one array per stat
+        elif method=="mlr":
+            predictions = dict()
+            predictions["mlr_beta"] = np.zeros((self.n_targets, self.n_predictors))
+            predictions["mlr_full_r2"] = np.zeros(self.n_targets)
+            for y, prediction in enumerate(predictions_list):
+                predictions["mlr_beta"][y,:] = prediction["mlr_beta"]
+                predictions["mlr_full_r2"][y] = prediction["mlr_full_r2"]
+        # all others: one array
+        else:
+            predictions[method] = np.zeros((self.n_targets, self.n_predictors))
+            for y, prediction in enumerate(predictions_list):
+                predictions[method][y,:] = prediction
         
         ## to dataframe & return
         # return dataframe as attribute of self
         if store:
-            self.predictions[method] = pd.DataFrame(data=predictions,
-                                                    columns=self.x_lab,
-                                                    index=self.y_lab) 
-            # save full model r2 if dominance analysis
-            if method=="dominance":
-                self.predictions["full_r2"] = pd.DataFrame(
-                    data=np.sum(self.predictions["dominance"].values, axis=1)[:,np.newaxis], 
-                    index=self.predictions["dominance"].index, 
-                    columns=["full_r2"])
-        # return numpy array independent of self
+            if method in ["dominance", "mlr"]:
+                for stat in predictions:
+                    self.predictions[stat] =  pd.DataFrame(
+                        data=predictions[stat], 
+                        columns=self.x_lab if not stat.endswith("full_r2") else [stat], 
+                        index=self.y_lab) 
+            else:
+                self.predictions[method] = pd.DataFrame(
+                    data=predictions[method],
+                    columns=self.x_lab,
+                    index=self.y_lab) 
+        # return numpy array or dict independent of self
         else:
             return predictions
    
@@ -364,19 +400,23 @@ class JuSpyce:
         
     def permute_maps(self, method, permute="X", null_maps=None, 
                      null_method="variogram", dist_mat=None, n_perm=1000, 
-                     n_proc=None, seed=None,
+                     adjust_r2=None, r_to_z=None,
+                     n_proc=None, n_proc_predict=1, seed=None,
                      parcellation=None, parc_space=None, parc_hemi=None, centroids=False,
                      verbose=True, store=True):
         
         ## check if predict was run
         if method not in self.predictions:
-            lgr.error(f"Data for prediction method '{method}' not found. Did you run CMC.predict(method='{method}', store=True)?!")
+            if not [p for p in self.predictions if p.startswith(method)]:
+                lgr.error(f"Data for prediction method '{method}' not found. Did you run CMC.predict(method='{method}', store=True)?!")
             
         ## overwrite settings from main CMC
         self.parc = parcellation if parcellation is not None else self.parc
         self.parc_space = parc_space if parc_space is not None else self.parc_space
         self.parc_hemi = parc_hemi if parc_hemi is not None else self.parc_hemi
-        self.n_proc = n_proc if n_proc is not None else self.n_proc
+        adj_r2 = self.adj_r2 if adjust_r2 is None else adjust_r2
+        r_to_z = self.r_to_z if r_to_z is None else r_to_z
+        n_proc = self.n_proc if n_proc is None else n_proc
 
         ## generate/ get null maps
         # case null maps not given
@@ -414,7 +454,7 @@ class JuSpyce:
                                                         n_nulls=n_perm, 
                                                         centroids=centroids, 
                                                         dist_mat=dist_mat,
-                                                        n_cores=self.n_proc, 
+                                                        n_cores=n_proc, 
                                                         seed=seed, verbose=verbose)
             # case not defined
             else:
@@ -425,83 +465,85 @@ class JuSpyce:
             lgr.info(f"Using provided null maps.")
             map_labs = list(null_maps.keys())
          
-        ## run null predictions
-        null_predictions = dict()
-        for i_null in tqdm(range(n_perm), desc=f"Calculating null predictions ({method})"):
+        ## define null prediction function for parallelization
+        def null_predict(i_null):
+             
             # case X nulls
             if permute=="X":
                 X = pd.DataFrame(np.c_[[null_maps[m][i_null,:] for m in map_labs]])
-                null_predictions[i_null] = self.predict(X=X,
-                                                        Y=self.Y,
-                                                        Z=self.Z,
-                                                        method=method,
-                                                        store=False,
-                                                        verbose=False)
+                null_prediction = self.predict(X=X,
+                                                Y=self.Y,
+                                                Z=self.Z,
+                                                method=method,
+                                                adjust_r2=adj_r2, 
+                                                r_to_z=r_to_z,
+                                                store=False,
+                                                verbose=False,
+                                                n_proc=n_proc_predict)
             # case Y nulls
             else:
                 Y = pd.DataFrame(np.c_[[null_maps[m][i_null,:] for m in map_labs]])
-                null_predictions[i_null] = self.predict(X=self.X,
-                                                        Y=Y,
-                                                        Z=self.Z,
-                                                        method=method,
-                                                        store=False,
-                                                        verbose=False)
+                null_prediction = self.predict(X=self.X,
+                                                Y=Y,
+                                                Z=self.Z,
+                                                method=method,
+                                                adjust_r2=adj_r2, 
+                                                r_to_z=r_to_z,
+                                                store=False,
+                                                verbose=False,
+                                                n_proc=n_proc_predict)
+            # return for collection
+            return null_prediction
+        
+        ## run actual null predictions using joblib.Parallel
+        null_predictions_list = Parallel(n_jobs=n_proc)(delayed(null_predict)(i_null) for i_null in tqdm(
+            range(n_perm), desc=f"Null predictions ({method}, {n_proc} proc)", disable=not verbose))
+        # collect data in array
+        null_predictions = dict()
+        for i_null, null_prediction in enumerate(null_predictions_list):
+            null_predictions[i_null] = null_prediction
         
         ## get p values
         lgr.info("Calculating exact p-values.")
-        p = np.zeros(self.predictions[method].shape)
-        # iterate predictors (columns)
-        for x in range(self.n_predictors):
-            # iterate targets (rows)
-            for y in range(self.n_targets):
-                true_pred = self.predictions[method].iloc[y,x]
-                null_pred = [null_predictions[i][y,x] for i in range(n_perm)]
-                # get p value
-                p[y,x] = null_to_p(true_pred, null_pred)
-        # collect data
-        p = pd.DataFrame(data=p,
-                         columns=self.x_lab,
-                         index=self.y_lab)
-        null_data = dict(
-            permute=permute,
-            n_perm=n_perm,
-            null_method=null_method,
-            null_maps=null_maps,
-            distance_matrix=dist_mat)
+        # make method iterable:
+        if method=="dominance":
+            method_i = ["dominance_"+c for c in ["total", "individual", "relative", "full_r2"]] 
+        elif method=="mlr":
+            method_i = ["mlr_"+c for c in ["beta", "full_r2"]]
+        else:
+            method_i = [method]
+        # iterate methods
+        p_data = dict()
+        for m in method_i:
+            p = np.zeros(self.predictions[m].shape)
+            # iterate predictors (columns)
+            for x in range(p.shape[1]):
+                # iterate targets (rows)
+                for y in range(p.shape[0]):
+                    true_pred = self.predictions[m].iloc[y,x]
+                    null_pred = [null_predictions[i][m][y,x] for i in range(n_perm)]
+                    # get p value
+                    p[y,x] = null_to_p(true_pred, null_pred)
+            # collect data
+            p_data[m] = pd.DataFrame(data=p,
+                                     columns=self.predictions[m].columns,
+                                     index=self.predictions[m].index)
+            
         ## save & return
-        if store:
-            self.p_predictions[method] = p
-            for key in null_data.keys(): 
-                self.nulls[key] = null_data[key]
+        if store:    
+            null_data = dict(
+                permute=permute,
+                n_perm=n_perm,
+                null_method=null_method,
+                null_maps=null_maps,
+                distance_matrix=dist_mat)
+            for m in p_data:
+                self.p_predictions[m] = p_data[m]
+            for k in null_data: 
+                self.nulls[k] = null_data[k]
             self.nulls[method+"-predictions"] = null_predictions
-        return p, null_predictions
-        
-    # ==============================================================================================
-    
-    def get_full_dominance_p(self, store=True):
-        
-        d = "dominance"
-        ## check if permute_maps was run and 
-        if d+"-predictions" not in list(self.nulls.keys()):
-            lgr.error(f"Null map data not found. Did you run CMC.permute_maps(method='{d}', store=True)?!")
-        
-        ## true full r2
-        true_rsq = self.predictions["full_r2"].values
-        ## get p
-        p = np.zeros(self.n_targets)
-        # iterate targets (rows)
-        for y in range(self.n_targets):            
-            # null full r2
-            null_rsq = [np.sum(self.nulls[d+"-predictions"][i][y,:]) for i in range(self.nulls["n_perm"])]
-            # get p
-            p[y] = null_to_p(true_rsq[y], null_rsq)
-        
-        ## save and return
-        full_rsq_p = pd.DataFrame(p[:,np.newaxis], index=self.predictions[d].index, columns=["full_r2"])
-        if store:
-            self.p_predictions["full_r2"] = full_rsq_p
-        return full_rsq_p
-    
+        return p_data, null_predictions    
+
     # ==============================================================================================
 
     def get_corrected_p(self, analysis="predictions", method="all",
