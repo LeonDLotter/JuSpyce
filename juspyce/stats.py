@@ -398,29 +398,45 @@ def null_to_p(test_value, null_array, tail="two", symmetric=False):
     return result[0] if return_first else result
 
 
-def mc_correction(p_array, alpha=0.05, method="fdr_bh"):
+def mc_correction(p_array, alpha=0.05, method="fdr_bh", how="array", dtype=None):
     
     # prepare data
     p = np.array(p_array)
     p_shape = p.shape
-    p_1d = p.flatten("C") # flatten row-wise
+
+    ## correct across whole input array -> flattern & reshape
+    if how in ["a", "arr", "array"]:
+        # flatten row-wise
+        p_1d = p.flatten("C") 
+        # get corrected p-values
+        res = multipletests(p_1d, alpha=alpha, method=method)
+        pcor_1d = res[1]
+        reject_1d = res[0]
+        # reshape to original form
+        pcor = np.reshape(pcor_1d, p_shape, "C")
+        reject = np.reshape(reject_1d, p_shape, "C")
     
-    # get corrected p-values
-    res = multipletests(p_1d, alpha=alpha, method=method)
-    pcor_1d = res[1]
-    reject_1d = res[0]
-    
-    # reshape to original form
-    pcor = np.reshape(pcor_1d, p_shape, "C")
-    reject = np.reshape(reject_1d, p_shape, "C")
-    
-    # return as input dtype
+    ## correct across each column/row
+    else:
+        pcor, reject = np.zeros_like(p, dtype=dtype), np.zeros_like(p, dtype=dtype)
+        if how in ["c", "col", "cols", "column", "columns"]:
+            for col in range(p.shape[1]):
+                res = multipletests(p[:,col], alpha=alpha, method=method)
+                pcor[:,col], reject[:,col] = res[1], res[0]
+        elif how in ["r", "row", "rows"]:
+            for row in range(p.shape[0]):
+                res = multipletests(p[row,:], alpha=alpha, method=method)
+                pcor[row,:], reject[row,:] = res[1], res[0]
+        else:
+            print(f"Input how='{how}' not defined!")
+          
+    ## return as input dtype
     if isinstance(p_array, pd.DataFrame):
-        pcor = pd.DataFrame(pcor, index=p_array.index, columns=p_array.columns)
-        reject = pd.DataFrame(reject, index=p_array.index, columns=p_array.columns)
+        pcor = pd.DataFrame(pcor, index=p_array.index, columns=p_array.columns, dtype=dtype)
+        reject = pd.DataFrame(reject, index=p_array.index, columns=p_array.columns, dtype=dtype)
     elif isinstance(p_array, pd.Series):
-        pcor = pd.Series(pcor, index=p_array.index, name=p_array.name)
-        reject = pd.Series(reject, index=p_array.index, name=p_array.name)     
+        pcor = pd.Series(pcor, index=p_array.index, name=p_array.name, dtype=dtype)
+        reject = pd.Series(reject, index=p_array.index, name=p_array.name, dtype=dtype)     
     return pcor, reject
 
 

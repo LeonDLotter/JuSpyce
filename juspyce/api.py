@@ -4,6 +4,7 @@ import gzip
 import logging
 import os
 import pickle
+import sys
 
 import numpy as np
 import pandas as pd
@@ -32,7 +33,7 @@ class JuSpyce:
                  parcellation_labels=None, parcellation_space="MNI152", 
                  parcellation_hemi=["L", "R"], parcellation_density="10k",
                  drop_nan=False,
-                 n_proc=1
+                 n_proc=1, dtype=np.float32,
                  ):
         
         self.x = x
@@ -49,6 +50,7 @@ class JuSpyce:
         self.parc_density = parcellation_density
         self.n_proc = n_proc
         self._drop_nan = drop_nan
+        self._dtype = dtype
         if standardize==True:
             self.zscore = "xyz"
         elif standardize==False:
@@ -56,6 +58,7 @@ class JuSpyce:
         else:
             self.zscore = standardize
         self._transform_count = 0
+        # empty data storage
         self.predictions = dict()
         self.nulls = dict()
         self.group_comparisons = dict()
@@ -175,19 +178,20 @@ class JuSpyce:
         if transform=="mean":
             lgr.info(f"Calculating parcel-wise mean of {dataset}.")
             data = np.nanmean(data_orig.values, axis=0)
-            data_df = pd.DataFrame(data=data[np.newaxis,:], index=[transform], columns=data_orig.columns)   
+            data_df = pd.DataFrame(data=data[np.newaxis,:], index=[transform], columns=data_orig.columns, dtype=self._dtype)   
         
         ## case partial
         elif transform=="partial":
             lgr.info(f"Regressing 'Z' from '{dataset}': new {dataset} = residuals.")
             
             # get residuals
-            data = np.zeros(data_orig_nan.shape)
+            data = np.zeros(data_orig_nan.shape, dtype=self._dtype)
             for xy in tqdm(range(data.shape[0]), disable=not verbose):
                 data[xy,:] = residuals(x=self.Z.values[:,~self._nan_bool].T, 
                                        y=data_orig_nan.iloc[xy,:].values.T)
             # save
-            data_df = fill_nan(pd.DataFrame(data=data, index=data_orig_nan.index, columns=data_orig_nan.columns),
+            data_df = fill_nan(pd.DataFrame(data=data, index=data_orig_nan.index, 
+                                            columns=data_orig_nan.columns),
                                self._nan_cols, self._nan_labs, "col")
         
         ## case pca / case ICA
@@ -201,9 +205,10 @@ class JuSpyce:
                                                    fa_rotation=fa_rotation,
                                                    seed=seed)
             # save
-            data_df = fill_nan(pd.DataFrame(data=data.T, index=[f"c{i}" for i in range(data.shape[1])], columns=data_orig_nan.columns),
+            data_df = fill_nan(pd.DataFrame(data=data.T, index=[f"c{i}" for i in range(data.shape[1])], 
+                                            columns=data_orig_nan.columns, dtype=self._dtype),
                                self._nan_cols, self._nan_labs, "col")
-            loadings = pd.DataFrame(loadings, columns=data_df.index, index=data_orig.index)
+            loadings = pd.DataFrame(loadings, columns=data_df.index, index=data_orig.index, dtype=self._dtype)
         
         ## case A-mean(B) / case mean(A)-mean(B) 
         ## case cohen(A,B) / case hedge(A,B) / case pairedcohen(A,B)
@@ -226,20 +231,20 @@ class JuSpyce:
             if transform=="A-mean(B)":
                 lgr.info(f"Subtracting parcel-wise mean of B from A: new {dataset} = {dataset}[A] - mean({dataset}[B]).")
                 data = data_A - np.nanmean(data_B, axis=0)
-                data_df = pd.DataFrame(data=data, index=data_A.index, columns=data_A.columns)  
+                data_df = pd.DataFrame(data=data, index=data_A.index, columns=data_A.columns, dtype=self._dtype)  
 
             ## case mean(A)-mean(B)
             elif transform=="mean(A)-mean(B)":
                 lgr.info(f"Subtracting parcel-wise mean of B from mean of A: new {dataset} = mean({dataset}[A]) - mean({dataset}[B]).")
                 data = np.nanmean(data_A, axis=0) - np.nanmean(data_B, axis=0)
-                data_df = pd.DataFrame(data=data[np.newaxis,:], index=[transform], columns=data_A.columns)
+                data_df = pd.DataFrame(data=data[np.newaxis,:], index=[transform], columns=data_A.columns, dtype=self._dtype)
             
             # case cohen(A,B) / case hedge(A,B) / case pairedcohen(A,B)
             else:
                 es = "cohen" if "cohen" in transform else "hedges"
                 pair = True if "paired" in transform else False
                 lgr.info(f"Calculating parcel-wise effect size between A and B ({es}, paired: {pair}).")
-                data = np.zeros(self.n_parcels)
+                data = np.zeros(self.n_parcels, dtype=self._dtype)
                 for p in tqdm(range(self.n_parcels), disable=not verbose):
                     data[p] = compute_effsize(x=data_A.iloc[:,p].values,
                                               y=data_B.iloc[:,p].values,
@@ -259,11 +264,11 @@ class JuSpyce:
             if dataset=="Y":
                 self.Y = data_df
                 self.n_targets = data_df.shape[0]
-                self.y_lab = list(data_df.index)
+                self.y_lab = data_df.index
             else:
                 self.X = data_df
                 self.n_predictors = data_df.shape[0]
-                self.x_lab = list(data_df.index)
+                self.x_lab = data_df.index
             self.groups = groups
             if transform in ["pca", "ica", "fa"]:
                 self.dim_red = dict(ev=ev,
@@ -279,6 +284,7 @@ class JuSpyce:
         ## check if fit was run
         if not (hasattr(self, "X") | hasattr(self, "Y")):
             lgr.error("Input data ('X', 'Y') not found. Did you run CMC.fit()?!")
+            sys.exit()
         
         # number of runners
         n_proc = self.n_proc if n_proc is None else n_proc
@@ -305,9 +311,9 @@ class JuSpyce:
             if method in ["pearson", "spearman"]:
                 rank = True if method=="spearman" else False
                 predictions = corr(x=X.values[:,no_nan], # atlas
-                                        y=Y.iloc[y:y+1,no_nan].values, # subjects
-                                        correlate="rows", 
-                                        rank=rank)[-1,:-1]
+                                   y=Y.iloc[y:y+1,no_nan].values, # subjects
+                                   correlate="rows", 
+                                   rank=rank)[-1,:-1]
                 if r_to_z:
                     predictions = np.arctanh(predictions)   
                     
@@ -315,19 +321,19 @@ class JuSpyce:
             elif method in ["partialpearson", "partialspearman"]:
                 rank = True if method=="partialspearman" else False
                 # iterate x (atlases/predictors)
-                predictions = np.zeros(self.n_predictors)
+                predictions = np.zeros(self.n_predictors, dtype=self._dtype)
                 for x in range(self.n_predictors):
                     predictions[x] = partialcorr3(x=X.iloc[x,no_nan].values.T, # atlas
-                                                    y=Y.iloc[y,no_nan].values.T, # subject
-                                                    z=Z.values[:,no_nan].T, # data to partial out
-                                                    rank=rank)
+                                                  y=Y.iloc[y,no_nan].values.T, # subject
+                                                  z=Z.values[:,no_nan].T, # data to partial out
+                                                  rank=rank)
                 if r_to_z:
                     predictions = np.arctanh(predictions)
                 
             ## case slr
             elif method=="slr":
                 # iterate x (atlases/predictors)
-                predictions = np.zeros(self.n_predictors)
+                predictions = np.zeros(self.n_predictors, dtype=self._dtype)
                 for x in range(self.n_predictors):
                     predictions[x] = r2(x=X.iloc[x:x+1,no_nan].values.T, # atlas
                                         y=Y.iloc[y:y+1,no_nan].values.T, # subject
@@ -356,25 +362,24 @@ class JuSpyce:
             range(self.n_targets), desc=f"Predicting ({method}, {n_proc} proc)", disable=not verbose))
         
         ## collect data in arrays
+        predictions = dict()
         # dominance: dict with one array per dominance stat
         if method=="dominance":
-            predictions = dict()
             for dom_stat in ["total", "individual", "relative"]:
-                predictions["dominance_"+dom_stat] = np.zeros((self.n_targets, self.n_predictors))
+                predictions["dominance_"+dom_stat] = np.zeros((self.n_targets, self.n_predictors), dtype=self._dtype)
                 for y, prediction in enumerate(predictions_list):
                     predictions["dominance_"+dom_stat][y,:] = prediction[dom_stat]
             predictions["dominance_full_r2"] = np.sum(predictions["dominance_total"], axis=1)[:,np.newaxis]
         # MLR: dict with one array per stat
         elif method=="mlr":
-            predictions = dict()
-            predictions["mlr_beta"] = np.zeros((self.n_targets, self.n_predictors))
-            predictions["mlr_full_r2"] = np.zeros(self.n_targets)
+            predictions["mlr_beta"] = np.zeros((self.n_targets, self.n_predictors), dtype=self._dtype)
+            predictions["mlr_full_r2"] = np.zeros((self.n_targets,1), dtype=self._dtype)
             for y, prediction in enumerate(predictions_list):
-                predictions["mlr_beta"][y,:] = prediction["mlr_beta"]
-                predictions["mlr_full_r2"][y] = prediction["mlr_full_r2"]
+                predictions["mlr_beta"][y,:] = prediction["beta"]
+                predictions["mlr_full_r2"][y] = prediction["full_r2"]
         # all others: one array
         else:
-            predictions[method] = np.zeros((self.n_targets, self.n_predictors))
+            predictions[method] = np.zeros((self.n_targets, self.n_predictors), dtype=self._dtype)
             for y, prediction in enumerate(predictions_list):
                 predictions[method][y,:] = prediction
         
@@ -386,21 +391,24 @@ class JuSpyce:
                     self.predictions[stat] =  pd.DataFrame(
                         data=predictions[stat], 
                         columns=self.x_lab if not stat.endswith("full_r2") else [stat], 
-                        index=self.y_lab) 
+                        index=self.y_lab,
+                        dtype=self._dtype) 
             else:
                 self.predictions[method] = pd.DataFrame(
                     data=predictions[method],
                     columns=self.x_lab,
-                    index=self.y_lab) 
+                    index=self.y_lab,
+                    dtype=self._dtype) 
         # return numpy array or dict independent of self
         else:
             return predictions
    
     # ==============================================================================================
         
-    def permute_maps(self, method, permute="X", null_maps=None, 
+    def permute_maps(self, method, permute="X", null_maps=None, use_null_maps=True,
                      null_method="variogram", dist_mat=None, n_perm=1000, 
                      adjust_r2=None, r_to_z=None,
+                     p_tail=None,
                      n_proc=None, n_proc_predict=1, seed=None,
                      parcellation=None, parc_space=None, parc_hemi=None, centroids=False,
                      verbose=True, store=True):
@@ -409,7 +417,14 @@ class JuSpyce:
         if method not in self.predictions:
             if not [p for p in self.predictions if p.startswith(method)]:
                 lgr.error(f"Data for prediction method '{method}' not found. Did you run CMC.predict(method='{method}', store=True)?!")
-            
+                sys.exit()
+        
+        ## check correct p_tail
+        if p_tail is not None: 
+            if ~isinstance(p_tail, dict): 
+                lgr.error("If 'p_tail' is defined, it must be a dict mapping (sub-)method to 'p_tails'!")
+                sys.exit()
+                
         ## overwrite settings from main CMC
         self.parc = parcellation if parcellation is not None else self.parc
         self.parc_space = parc_space if parc_space is not None else self.parc_space
@@ -419,9 +434,18 @@ class JuSpyce:
         n_proc = self.n_proc if n_proc is None else n_proc
 
         ## generate/ get null maps
-        # case null maps not given
+        # case null maps given
+        if null_maps is not None:
+            lgr.info(f"Using provided null maps.")
+        # case null maps not given but existing
+        elif (null_maps is None) & (use_null_maps==True):
+            try:
+                null_maps = self.nulls["null_maps"]
+            except:
+                lgr.info("No null maps found.")
+        # case null maps not given & not existing
         if null_maps is None:
-            lgr.info(f"Generating null maps for '{permute}' data (n = {n_perm}, null_method = '{null_method}', method = '{method}').")
+            lgr.info(f"Generating null maps for '{permute}' data (n = {n_perm}, null_method = '{null_method}', method = '{method}', n_prc = {n_proc}).")
             
             # true data (either X or Y)
             true_data = self.X if permute=="X" else self.Y
@@ -438,7 +462,7 @@ class JuSpyce:
                 for i_map, map_lab in enumerate(tqdm(map_labs, desc=f"Generating {permute} null data", disable=not verbose)):
                     lgr.debug(f"Generating null map for {map_lab}.")
                     # get null data
-                    null_maps[map_lab] = np.zeros((n_perm, self.n_parcels))
+                    null_maps[map_lab] = np.zeros((n_perm, self.n_parcels), dtype=self._dtype)
                     for i_null in range(n_perm):
                         null_maps[map_lab][i_null,:] = np.random.permutation(true_data.iloc[i_map,:])[:]
                     dist_mat = None
@@ -459,39 +483,34 @@ class JuSpyce:
             # case not defined
             else:
                 lgr.error(f"Null map generation method '{null_method}' not defined!")
-        
-        # case null maps given:
-        else:
-            lgr.info(f"Using provided null maps.")
-            map_labs = list(null_maps.keys())
          
         ## define null prediction function for parallelization
         def null_predict(i_null):
              
             # case X nulls
             if permute=="X":
-                X = pd.DataFrame(np.c_[[null_maps[m][i_null,:] for m in map_labs]])
+                X = pd.DataFrame(np.c_[[null_maps[m][i_null,:] for m in self.x_lab]])
                 null_prediction = self.predict(X=X,
-                                                Y=self.Y,
-                                                Z=self.Z,
-                                                method=method,
-                                                adjust_r2=adj_r2, 
-                                                r_to_z=r_to_z,
-                                                store=False,
-                                                verbose=False,
-                                                n_proc=n_proc_predict)
+                                               Y=self.Y,
+                                               Z=self.Z,
+                                               method=method,
+                                               adjust_r2=adj_r2, 
+                                               r_to_z=r_to_z,
+                                               store=False,
+                                               verbose=False,
+                                               n_proc=n_proc_predict)
             # case Y nulls
             else:
-                Y = pd.DataFrame(np.c_[[null_maps[m][i_null,:] for m in map_labs]])
+                Y = pd.DataFrame(np.c_[[null_maps[m][i_null,:] for m in self.y_lab]])
                 null_prediction = self.predict(X=self.X,
-                                                Y=Y,
-                                                Z=self.Z,
-                                                method=method,
-                                                adjust_r2=adj_r2, 
-                                                r_to_z=r_to_z,
-                                                store=False,
-                                                verbose=False,
-                                                n_proc=n_proc_predict)
+                                               Y=Y,
+                                               Z=self.Z,
+                                               method=method,
+                                               adjust_r2=adj_r2, 
+                                               r_to_z=r_to_z,
+                                               store=False,
+                                               verbose=False,
+                                               n_proc=n_proc_predict)
             # return for collection
             return null_prediction
         
@@ -504,18 +523,21 @@ class JuSpyce:
             null_predictions[i_null] = null_prediction
         
         ## get p values
-        lgr.info("Calculating exact p-values.")
-        # make method iterable:
+        # make method iterable and define p-tails:
         if method=="dominance":
             method_i = ["dominance_"+c for c in ["total", "individual", "relative", "full_r2"]] 
+            p_tail = {m:"upper" for m in method_i} if p_tail is None else p_tail
         elif method=="mlr":
             method_i = ["mlr_"+c for c in ["beta", "full_r2"]]
+            p_tail = {"mlr_beta":"two", "mlr_full_r2":"upper"} if p_tail is None else p_tail
         else:
             method_i = [method]
+            p_tail = {method:"upper"} if method=="slr" else {method:"two"} if p_tail is None else p_tail
+        lgr.info(f"Calculating exact p-values (tails = {p_tail}).")
         # iterate methods
         p_data = dict()
         for m in method_i:
-            p = np.zeros(self.predictions[m].shape)
+            p = np.zeros(self.predictions[m].shape, dtype=self._dtype)
             # iterate predictors (columns)
             for x in range(p.shape[1]):
                 # iterate targets (rows)
@@ -523,11 +545,12 @@ class JuSpyce:
                     true_pred = self.predictions[m].iloc[y,x]
                     null_pred = [null_predictions[i][m][y,x] for i in range(n_perm)]
                     # get p value
-                    p[y,x] = null_to_p(true_pred, null_pred)
+                    p[y,x] = null_to_p(true_pred, null_pred, tail=p_tail[m])
             # collect data
             p_data[m] = pd.DataFrame(data=p,
                                      columns=self.predictions[m].columns,
-                                     index=self.predictions[m].index)
+                                     index=self.predictions[m].index,
+                                     dtype=self._dtype)
             
         ## save & return
         if store:    
@@ -546,8 +569,8 @@ class JuSpyce:
 
     # ==============================================================================================
 
-    def get_corrected_p(self, analysis="predictions", method="all",
-                        mc_alpha=0.05, mc_method="fdr_bh", store=True):
+    def correct_p(self, analysis="predictions", method="all",
+                  mc_alpha=0.05, mc_method="fdr_bh", mc_dimension="array", store=True):
         
         # get p data depending on analysis type
         if analysis=="predictions":
@@ -559,11 +582,19 @@ class JuSpyce:
         if (method==["all"]) | (method==[True]):
             # list of all p-value dataframes, reduce to unique uncorrected p-values
             method = list(set([key.split("-")[0] for key in p_value_dict.keys()]))
-            
+        # get dimension of array to correct along
+        if mc_dimension in ["x", "X", "c", "col", "cols", "column", "columns"]:
+            how = "c"
+        elif mc_dimension in ["y", "Y", "r", "row", "rows"]:
+            how = "r"
+        else:
+            how = "a"
+        
         # get p values
         p_corr = dict()
         for m in method:
-            p_corr[m+"-"+mc_method], _ = mc_correction(p_value_dict[m], alpha=mc_alpha, method=mc_method)
+            p_corr[m+"-"+mc_method], _ = mc_correction(p_value_dict[m], alpha=mc_alpha, 
+                                                       method=mc_method, how=how, dtype=self._dtype)
         # save and return
         if store:
             if analysis=="predictions":

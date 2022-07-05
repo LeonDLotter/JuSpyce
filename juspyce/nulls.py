@@ -14,20 +14,9 @@ logging.basicConfig(level=logging.INFO)
 lgr = logging.getLogger(__name__)
 lgr.setLevel(logging.INFO)
 
-def get_distance_matrix(parcellation, parc_space=None, parc_hemi=["L", "R"], 
+def get_distance_matrix(parc, parc_space=None, parc_hemi=["L", "R"], 
                         parc_density="10k", centroids=False, 
                         n_cores=1, verbose=True):
-    
-   # load parcellation
-    if isinstance(parcellation, (nib.Nifti1Image, str)):
-        parc = load_nifti(parcellation)
-        parc_space = "MNI152"
-    elif isinstance(parcellation, tuple):
-        parc = (load_gifti(parcellation[0]),
-                load_gifti(parcellation[1]))
-        parc_space="fsaverage"
-    else:
-        print("'parcellation' data type not defined!")
     
     ## generate distance matrix
     # case volumetric 
@@ -76,7 +65,7 @@ def get_distance_matrix(parcellation, parc_space=None, parc_hemi=["L", "R"],
             dist.append(_get_distmat(hemi, 
                                      atlas=parc_space, 
                                      density=parc_density, 
-                                     parcellation=parcellation[i_hemi],
+                                     parcellation=parc[i_hemi] if len(parc_hemi)>1 else parc,
                                      n_proc=n_cores))
         dist = tuple(dist)
 
@@ -85,23 +74,44 @@ def get_distance_matrix(parcellation, parc_space=None, parc_hemi=["L", "R"],
 
 
 def generate_null_maps(data, dist_mat=None, parcellation=None, 
-                       parc_space=None, parc_hemi=["L", "R"], parc_density="10k", 
+                       parc_space=None, parc_hemi=None, parc_density=None, 
                        n_nulls=1000, centroids=False,
                        n_cores=1, seed=None, verbose=True):
     
     ## load parcellation
     if dist_mat is None:
-        if isinstance(parcellation, (nib.Nifti1Image, str)):
+        lgr.info(f"Loading parcellation (parc_space = '{parc_space}', parc_hemi = {parc_hemi}, parc_density = '{parc_density}'.")
+        if isinstance(parcellation, nib.Nifti1Image):
             parc = load_nifti(parcellation)
             parc_space = "MNI152" if parc_space is None else parc_space
+            
         elif isinstance(parcellation, tuple):
             parc = (load_gifti(parcellation[0]),
                     load_gifti(parcellation[1]))
             parc_space = "fsaverage" if parc_space is None else parc_space
+            
+        elif isinstance(parcellation, nib.GiftiImage):
+            parc = load_gifti(parcellation)
+            parc_space = "fsaverage" if parc_space is None else parc_space
+        
+        elif isinstance(parcellation, str):
+            if parcellation.endswith(".nii") | parcellation.endswith(".nii.gz"):
+                parc = load_nifti(parcellation)
+                parc_space = "MNI152" if parc_space is None else parc_space
+            if parcellation.endswith(".gii") | parcellation.endswith(".gii.gz"):
+                parc = load_gifti(parcellation)
+                parc_space = "fsaverage" if parc_space is None else parc_space
+            else:
+                lgr.critical("'parcellation' is string (path?) but ending was not recognized!")
         else:
-            lgr.error("'parcellation' data type not defined!")
+            lgr.critical("'parcellation' data type not defined!")
+        
+        if isinstance(parc, nib.GiftiImage) & (len(parc_hemi)>1):
+            lgr.critical("If only one gifti parcellation image is supplied, 'parc_hemi' must be one of: ['L'], ['R']!")
+
     else:
         parc = parcellation
+        
     
     ## input data
     n_data = data.shape[0]
@@ -117,7 +127,7 @@ def generate_null_maps(data, dist_mat=None, parcellation=None,
     ## get distance matrix
     if dist_mat is None:
         lgr.info(f"Calculating distance matrix/matrices (space = '{parc_space}').")
-        dist_mat = get_distance_matrix(parcellation=parc, 
+        dist_mat = get_distance_matrix(parc=parc, 
                                        parc_space=parc_space,
                                        parc_hemi=parc_hemi,
                                        parc_density=parc_density,
@@ -129,10 +139,10 @@ def generate_null_maps(data, dist_mat=None, parcellation=None,
     
     ## generate null data
     nulls = dict()
-    for i, i_lab in enumerate(tqdm(data_labs, desc="Generating null data", disable=not verbose)):
+    for i, i_lab in enumerate(tqdm(data_labs, desc="Generating null maps", disable=not verbose)):
         # case volumetric data
         if parc_space in ["MNI152", "MNI"]:
-            lgr.debug(f"Generating volumetric null data {i}/{n_data} (n = {n_nulls})...")
+            lgr.debug(f"Generating volumetric null maps {i}/{n_data} (n = {n_nulls})...")
 
             # null data
             generater = Base(x=data[i,:], 
@@ -143,17 +153,26 @@ def generate_null_maps(data, dist_mat=None, parcellation=None,
 
         # case surface data
         else:
-            lgr.debug(f"Generating surface null data {i}/{n_data} (n = {n_nulls})...")
-            # null data (bug in neuromaps: if distmat provided, parcellation, atlas & density should be ignored -> not the case)
-            nulls[i_lab] = burt2020(data=data[i,:],
-                                    parcellation=parc,
-                                    atlas=parc_space,
-                                    density=parc_density,
-                                    n_perm=n_nulls,
-                                    seed=seed,
-                                    n_proc=n_cores,
-                                    distmat=dist_mat).T
-    
+            lgr.debug(f"Generating surface null maps {i}/{n_data} (n = {n_nulls})...")
+            # case both hemispheres -> neuromaps
+            # (bug in neuromaps: if distmat provided, parcellation, atlas & density should be ignored -> not the case)
+            if isinstance(parc, tuple):
+                nulls[i_lab] = burt2020(data=data[i,:],
+                                        parcellation=parc,
+                                        atlas=parc_space,
+                                        density=parc_density,
+                                        n_perm=n_nulls,
+                                        seed=seed,
+                                        n_proc=n_cores,
+                                        distmat=dist_mat).T
+            # case one hemisphere -> neuromaps not working
+            else:
+                generater = Base(x=data[i,:], 
+                                 D=dist_mat[0], 
+                                 seed=seed,
+                                 n_jobs=n_cores)
+                nulls[i_lab] = generater(n_nulls, 100)
+            
     ## return
     lgr.info("Null data generation finished.")
     return nulls, dist_mat

@@ -16,7 +16,8 @@ def get_input_data(data,
                    parcellation=None, 
                    parc_labels=None,
                    parc_space=None,
-                   parc_hemi=None):
+                   parc_hemi=None,
+                   dtype=None):
     
     ## case list
     if isinstance(data, list):
@@ -47,7 +48,7 @@ def get_input_data(data,
         for file in tqdm(data, desc="Parcellating imaging data"):
             file_parc = parcellater.transform(file, data_space)[0,:]
             data_parc.append(file_parc)
-        data_parc = np.array(data_parc)
+        data_parc = np.array(data_parc, dtype=dtype)
         # output dataframe
         if data_labels is None:
             try:
@@ -91,4 +92,4 @@ def get_input_data(data,
         lgr.warning("Data contains nan's! Will be excluded on case-wise basis.")
  
     ## return data array
-    return df_parc
+    return df_parc.astype(dtype)
