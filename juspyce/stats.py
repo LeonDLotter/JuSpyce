@@ -150,7 +150,8 @@ def dominance(x, y, adj_r2=False, verbose=True):
         lst.remove(elem)
         return tuple(lst)
 
-    if verbose: lgr.info(f"Running dominance analysis with {x.shape[1]} predictors and {len(y)} features.")
+    if verbose: lgr.info(f"Running dominance analysis with {x.shape[1]} "
+                         f"predictors and {len(y)} features.")
     
     ## print total rsquare
     rsq_total = r2(x=x, y=y, adj_r2=adj_r2)
@@ -186,7 +187,8 @@ def dominance(x, y, adj_r2=False, verbose=True):
         for j_node in range(n_pred):
             j_node_sel = [v for v in i_len_combs if j_node in v]
             reduced_list = [del_from_tuple(comb, j_node) for comb in j_node_sel]
-            diff_values = [rsqs[j_node_sel[i]] - rsqs[reduced_list[i]] for i in range(len(reduced_list))]
+            diff_values = [rsqs[j_node_sel[i]] - rsqs[reduced_list[i]] for i in range(
+                len(reduced_list))]
             dom_stats["partial"][j_node,i] = np.mean(diff_values)
     #dom_stats["partial"] = dom_stats["partial"].mean(axis=1)
 
@@ -199,7 +201,8 @@ def dominance(x, y, adj_r2=False, verbose=True):
     
     ## sanity check
     if not np.allclose(np.sum(dom_stats["total"]), rsq_total):
-        lgr.error(f"Sum of total dominance ({np.sum(dom_stats['total'])}) does not equal full model R^2 ({rsq_total})! ")
+        lgr.error(f"Sum of total dominance ({np.sum(dom_stats['total'])}) does not "
+                  f"equal full model R^2 ({rsq_total})! ")
     
     return dom_stats
 
@@ -251,7 +254,8 @@ def reduce_dimensions(data, method="pca", n_components=None, min_ev=None,
     
     # set n_components to max number if min explained variance is given
     n_components = data.shape[1] if (n_components is None) | (min_ev is not None) else n_components
-    lgr.info(f"Performing dimensionality reduction using {method} (max components: {n_components}, min EV: {min_ev}).")
+    lgr.info(f"Performing dimensionality reduction using {method} (max components: "
+             f"{n_components}, min EV: {min_ev}).")
     
     # case pca
     if method=="pca":
@@ -265,15 +269,18 @@ def reduce_dimensions(data, method="pca", n_components=None, min_ev=None,
                 total_ev += e
                 if total_ev>=min_ev:
                     n_components = i+1
-                    lgr.info(f"{n_components} PC(s) explain(s) a total variance of {np.sum(ev[:n_components]):.04f} >= {min_ev} ({ev[:n_components]}).")
+                    lgr.info(f"{n_components} PC(s) explain(s) a total variance of "
+                             f"{np.sum(ev[:n_components]):.04f} >= {min_ev} ({ev[:n_components]}).")
                     break
-        # cut components
+        # cut components & ev
         components = pcs[:,:n_components]
+        ev = ev[:n_components]
         lgr.info(f"Returning {n_components} principal component(s).")
     
     # case ica
     elif method=="ica":
-        components = FastICA(n_components=n_components, random_state=seed, max_iter=1000).fit_transform(data) 
+        components = FastICA(n_components=n_components, random_state=seed, max_iter=1000)\
+            .fit_transform(data) 
         ev = None
         lgr.info(f"Returning {n_components} independent component(s).")
  
@@ -286,10 +293,12 @@ def reduce_dimensions(data, method="pca", n_components=None, min_ev=None,
             ev = fa.get_factor_variance()[2]
             if ev[-1]<min_ev:
                 n_components -= 1
-                lgr.warning(f"Given min EV ({min_ev}) > max possible EV ({ev[-1]:.02f})! Using max factor number ({n_components}).") 
+                lgr.warning(f"Given min EV ({min_ev}) > max possible EV ({ev[-1]:.02f})! "
+                            f"Using max factor number ({n_components}).") 
             else:
                 n_components = [i for i in range(len(ev)) if (ev[i] > min_ev)][1]
-                lgr.info(f"{n_components} factor(s) explain(s) a total variance of {ev[n_components]:.02f} >= {min_ev}.")
+                lgr.info(f"{n_components} factor(s) explain(s) a total variance of "
+                         f"{ev[n_components]:.02f} >= {min_ev}.")
         # run actual factor analysis
         fa = FactorAnalyzer(n_factors=n_components, method=fa_method, rotation=fa_rotation)
         fa.fit(data)
@@ -432,11 +441,27 @@ def mc_correction(p_array, alpha=0.05, method="fdr_bh", how="array", dtype=None)
           
     ## return as input dtype
     if isinstance(p_array, pd.DataFrame):
-        pcor = pd.DataFrame(pcor, index=p_array.index, columns=p_array.columns, dtype=dtype)
-        reject = pd.DataFrame(reject, index=p_array.index, columns=p_array.columns, dtype=dtype)
+        pcor = pd.DataFrame(
+            pcor, 
+            index=p_array.index, 
+            columns=p_array.columns, 
+            dtype=dtype)
+        reject = pd.DataFrame(
+            reject, 
+            index=p_array.index, 
+            columns=p_array.columns, 
+            dtype=dtype)
     elif isinstance(p_array, pd.Series):
-        pcor = pd.Series(pcor, index=p_array.index, name=p_array.name, dtype=dtype)
-        reject = pd.Series(reject, index=p_array.index, name=p_array.name, dtype=dtype)     
+        pcor = pd.Series(
+            pcor, 
+            index=p_array.index, 
+            name=p_array.name, 
+            dtype=dtype)
+        reject = pd.Series(
+            reject, 
+            index=p_array.index, 
+            name=p_array.name, 
+            dtype=dtype)     
     return pcor, reject
 
 
@@ -455,8 +480,6 @@ def check_partialpearson(x,y,z):
     data = pd.DataFrame(dict(x=x, y=y, z=z))
     res = partial_corr(data, "x", "y", "z", method="pearson")
     return res.r.values
-
-    return r
 
 def check_partialspearman(x,y, z):
     from pingouin import partial_corr

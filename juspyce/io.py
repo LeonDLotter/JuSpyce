@@ -1,10 +1,11 @@
 import logging
+import os
 
+import nibabel as nib
 import numpy as np
 import pandas as pd
-import os
-import nibabel as nib
-from neuromaps import parcellate, resampling, images
+from joblib import Parallel, delayed
+from neuromaps import images, parcellate, resampling
 from tqdm.auto import tqdm
 
 lgr = logging.getLogger(__name__)
@@ -17,7 +18,10 @@ def get_input_data(data,
                    parc_labels=None,
                    parc_space=None,
                    parc_hemi=None,
-                   dtype=None):
+                   resampling_target="data",
+                   dtype=None,
+                   n_proc=1,
+                   verbose=True):
     
     ## case list
     if isinstance(data, list):
@@ -32,55 +36,92 @@ def get_input_data(data,
                 if parc_hemi is None:
                     lgr.error("Input is single GIFTI image but 'hemi' is not given. Assuming left!")
                     parc_hemi = "left"
-        if isinstance(parcellation, tuple):
+        elif isinstance(parcellation, nib.GiftiImage):      
+            parcellation = images.load_gifti(parcellation) 
+        elif isinstance(parcellation, nib.Nifti1Image):      
+            parcellation = images.load_nifti(parcellation) 
+        elif isinstance(parcellation, tuple):
             parcellation = (images.load_gifti(parcellation[0]),
-                            images.load_gifti(parcellation[1]))        
-                
-        # neuromaps parcellater: can deal with str, path, nifti, gifti, tuple
-        parcellater = parcellate.Parcellater(parcellation=parcellation, 
-                                             space=parc_space,
-                                             resampling_target="data",
-                                             hemi=parc_hemi
-                                             ).fit()
+                            images.load_gifti(parcellation[1])) 
+        else:
+            lgr.critical(f"Parcellation data type not recognized! ({type(parcellation)})")
+          
+        # catch problems
+        if (data_space in ["MNI152", "MNI", "mni", "mni152"]) & \
+            (parc_space not in ["MNI152", "MNI", "mni", "mni152"]) & \
+            (resampling_target=="data"):
+                lgr.warning("Data is in MNI space but parcellation is in surface space and "
+                            "'resampling_target' is 'data'! Cannot resample surface to MNI: "
+                            "Setting 'resampling_target' to 'parcellation'.")
+                resampling_target = "parcellation"
+            
         
-        # extract data
-        data_parc = list()
-        for file in tqdm(data, desc="Parcellating imaging data"):
-            file_parc = parcellater.transform(file, data_space)[0,:]
-            data_parc.append(file_parc)
-        data_parc = np.array(data_parc, dtype=dtype)
+        # neuromaps parcellater: can deal with str, path, nifti, gifti, tuple
+        parcellater = parcellate.Parcellater(
+            parcellation=parcellation, 
+            space=parc_space,
+            resampling_target=resampling_target,
+            hemi=parc_hemi
+            ).fit()
+        
+        # data extraction function
+        def extract_data(file):
+            file_parc = parcellater.transform(
+                data=file, 
+                space=data_space)
+            return file_parc
+        # extract data (in parallel)
+        data_parc = Parallel(n_jobs=n_proc)(delayed(extract_data)(f) for f in tqdm(
+            data, desc=f"Parcellating imaging data ({n_proc} proc)", disable=not verbose))
+        # collect data
+        if isinstance(parcellation, tuple):
+            data_parc = np.array([d for d in data_parc], dtype=dtype)
+        else:  
+            data_parc = np.array([d[0,:] for d in data_parc], dtype=dtype)
+
         # output dataframe
         if data_labels is None:
             try:
-                data_labels = [os.path.basename(f) for f in data]
+                if isinstance(data[0], tuple):
+                    data_labels = [os.path.basename(f[0]).replace(".gii","").replace(".gz","") \
+                        for f in data]
+                else:
+                    data_labels = [os.path.basename(f).replace(".nii","").replace(".gz","") \
+                        for f in data]
             except:
                 data_labels = list(range(len(data)))
-        df_parc = pd.DataFrame(data=data_parc, 
-                               index=data_labels,
-                               columns=parc_labels)
+        df_parc = pd.DataFrame(
+            data=data_parc, 
+            index=data_labels,
+            columns=parc_labels)
     
     ## case array
     elif isinstance(data, np.ndarray):
-        lgr.info("Input type: ndarray, assuming parcellated data with shape (n_files/subjects/etc, n_parcels).")
+        lgr.info("Input type: ndarray, assuming parcellated data with shape "
+                 "(n_files/subjects/etc, n_parcels).")
         if len(data.shape)==1:
             data = data[np.newaxis,:]
-        df_parc = pd.DataFrame(data=data,
-                               index=data_labels,
-                               columns=parc_labels)
+        df_parc = pd.DataFrame(
+            data=data,
+            index=data_labels,
+            columns=parc_labels)
             
     ## case dataframe
     elif isinstance(data, pd.DataFrame):
-        lgr.info("Input type: DataFrame, assuming parcellated data with shape (n_files/subjects/etc, n_parcels).")
-        df_parc = pd.DataFrame(data=data.values,
-                               index=data_labels if data_labels is not None else data.index,
-                               columns=parc_labels if parc_labels is not None else data.columns)
+        lgr.info("Input type: DataFrame, assuming parcellated data with shape "
+                 "(n_files/subjects/etc, n_parcels).")
+        df_parc = pd.DataFrame(
+            data=data.values,
+            index=data_labels if data_labels is not None else data.index,
+            columns=parc_labels if parc_labels is not None else data.columns)
     
     ## case series
     elif isinstance(data, pd.Series):
         lgr.info("Input type: Series, assuming parcellated data with shape (1, n_parcels).")
-        df_parc = pd.DataFrame(data=data.values,
-                               index=data_labels if data_labels is not None else data.index,
-                               columns=parc_labels if parc_labels is not None else [data.name])
+        df_parc = pd.DataFrame(
+            data=data.values,
+            index=data_labels if data_labels is not None else data.index,
+            columns=parc_labels if parc_labels is not None else [data.name])
         df_parc = df_parc.T
     
     ## case not defined
