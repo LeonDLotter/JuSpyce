@@ -1,12 +1,11 @@
 # <a name="top"></a>JuSpyce - a toolbox for flexible assessment of spatial associations between brain images
 
-
-[![DOI](https://zenodo.org/badge/473223442.svg)](https://zenodo.org/badge/latestdoi/473223442)  
+[![DOI](https://zenodo.org/badge/506986337.svg)](https://zenodo.org/badge/latestdoi/506986337)  
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey)](http://creativecommons.org/licenses/by-nc-sa/4.0/)  
 
 ---
 
-*Spatial patterns observed in functional magnetic resonance images likely reflect function and dysfunction of underlying biological systems. This applies alike to function and structure, on the surface or in the volumetric space, to typical activation patterns, or to maps of disordered brain function, for example obtained from patients compared to a reference cohort.*
+*Spatial (alteration) patterns observed in MRI images may often reflect function and dysfunction of underlying biological systems. This applies alike to function and structure, on the surface or in the volumetric space, to typical activation patterns, or to maps of disordered brain function, for example obtained from patients compared to a reference cohort.*
 
 To date, there are several toolboxes targeting the question how brain images obtained from fMRI on the one hand and, e.g., nuclear imaging on the other can be related to another.  
 The [JuSpace](https://github.com/juryxy/JuSpace) toolbox is especially suited for the correlation of nuclear imaging maps with subject-level *difference maps* obtained from fMRI by, e.g., using the mean activation pattern of one cohort (healthy controls) as a reference which is subtracted from each individual brain map in a target cohort (patients). Significance is then assessed by permutation of group labels.  
@@ -51,7 +50,7 @@ Let's assume, we are interested in how our `X` and `Y` data relate directly to e
 
 #### 3.1 Based on spatial null maps: `JuSpyce.permute_maps()`
 
-To assign nonparametric and spatial autocorrelation-corrected p values to each "prediction metric" from the point above, we can generate surrogate ("null") maps and rerun `JuSpyce.predict()` on these to obtain null distributions corresponding to each "true" prediction metric. From these null distributions, empirical p values are then calculated. Null maps can be created for either `X` or `Y` data, or both at once. The typical approach would be to use the predictor data `X`. Datawise, we can use:
+To assign nonparametric and spatial autocorrelation-corrected p values to each "prediction metric" from the point above, we can generate surrogate ("null") maps and rerun `JuSpyce.predict()` on these to obtain null distributions corresponding to each "true" prediction metric. From these null distributions, empirical p values are then calculated. Null maps can be created for either `X` or `Y` data, or both at once. The typical approach would be to use the predictor data `X`. Concerning the input data, we can use:
 - The "raw" `X` and `Y` input data
 - The "new" `X` data after, e.g., dimensionality reduction
 - The "new" `Y` data after, e.g., the parcelwise effect size between two defined groups has been calculated. This analysis would show us if the difference map between two groups can be "predicted" from our, e.g. PET data in comparison to predictor maps with similar spatial properties.
