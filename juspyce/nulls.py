@@ -169,7 +169,8 @@ def generate_null_maps(data, parcellation, dist_mat=None,
                  f"{temp if parc_space in ['fsaverage', 'fsLR', 'fsa', 'fslr'] else ''}).")
     
         ## calculate distance matrix
-        lgr.info(f"Calculating distance matrix/matrices (space = '{parc_space}').")
+        lgr.info("Calculating distance matrix/matrices ({d}).".format(
+            d='euclidean' if parc_space in ['mni','MNI','mni152','MNI152'] else 'geodesic'))
         dist_mat = get_distance_matrix(
             parc=parc, 
             parc_space=parc_space,

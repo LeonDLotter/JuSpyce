@@ -34,7 +34,7 @@ def get_input_data(data,
             elif parcellation.endswith(".gii") or parcellation.endswith(".gii.gz"):
                 parcellation = images.load_gifti(parcellation)
                 if parc_hemi is None:
-                    lgr.error("Input is single GIFTI image but 'hemi' is not given. Assuming left!")
+                    lgr.warning("Input is single GIFTI image but 'hemi' is not given. Assuming left!")
                     parc_hemi = "left"
         elif isinstance(parcellation, nib.GiftiImage):      
             parcellation = images.load_gifti(parcellation) 
@@ -126,7 +126,7 @@ def get_input_data(data,
     
     ## case not defined
     else:
-        lgr.error(f"Can't import from data with type {type(data)}!")
+        lgr.critical(f"Can't import from data with type {type(data)}!")
         
     ## check for nan's
     if df_parc.isnull().any(None):

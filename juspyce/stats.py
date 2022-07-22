@@ -308,7 +308,7 @@ def reduce_dimensions(data, method="pca", n_components=None, min_ev=None,
         lgr.info(f"Returning {n_components} factor(s).")
         
     else:
-        lgr.error(f"method = '{method}' not defined!")
+        lgr.critical(f"method = '{method}' not defined!")
     
     # get PCA and ICA "loadings"
     if method in ["pca", "ica"]:
