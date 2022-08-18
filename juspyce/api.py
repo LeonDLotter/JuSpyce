@@ -4,8 +4,6 @@ import gzip
 import logging
 import os
 import pickle
-import sys
-from telnetlib import XASCII
 
 import numpy as np
 import pandas as pd
@@ -419,7 +417,7 @@ class JuSpyce:
             comparison = ""
         Z = self.Z if Z is None else Z
         
-        # boolean vector to exlude nan parcels
+        # boolean vector to exclude nan parcels
         no_nan = np.array(~self._nan_bool)
         
         ## function to perform prediction target-wise (= per subject), needed for parallelization
@@ -608,7 +606,7 @@ class JuSpyce:
             if comparison is None:
                 true_data = self.X if permute=="X" else self.Y
             else:
-                true_data = self.comparions[comparison]
+                true_data = self.comparisons[comparison]
             # labels of maps
             map_labs = list(true_data.index)
             

@@ -5,7 +5,7 @@ import nibabel as nib
 import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
-from neuromaps import images, parcellate, resampling
+from neuromaps import images, parcellate
 from tqdm.auto import tqdm
 
 lgr = logging.getLogger(__name__)

@@ -14,7 +14,7 @@ The [neuromaps](https://netneurolab.github.io/neuromaps/) toolbox integrates sev
 
 ## JuSpyce
 
-*JuSpyce* is a Python script version of the Matlab-based [JuSpace](https://github.com/juryxy/JuSpace) toolbox. The concept is based on the toolboxes mentioned above with the following line of thought. 
+*JuSpyce* is an advanced Python script version of the Matlab-based [JuSpace](https://github.com/juryxy/JuSpace) toolbox. The concept is based on the toolboxes mentioned above with the following line of thought. 
 
 ### 1. The data: `JuSpyce.fit()`
 
@@ -33,7 +33,7 @@ The data (`X` or `Y`) can be "transformed" in the following ways:
 
 #### 1.2 Data comparison: `JuSpyce.compare()`
 
-The `Y` data can be "compared" between predefined groups in the following ways. The idea to this is based on the JuSpace core functionality. We have to supply a group assignment vector (python list of nulls and ones).
+The `Y` data can be "compared" between predefined groups in the following ways. The idea for this is based on the JuSpace core functionality. We have to supply a group assignment vector (python list of nulls and ones).
 - **One group minus the mean of the other**: The difference between each vector of group A and the parcelwise means of group B (`diff(A,mean(B))`, `diff(B,mean(A))`).
 - **Mean difference**: The difference between the parcelwise means of group A and the parcelwise means of group B (`diff(mean(A),mean(B))`).
 - **Effect sizes of the group difference**: The parcelwise effect sizes (Cohen's d, Hedge's g, paired Cohen's d) of group A compared with group B (`cohen(A,B)`, `hedge(A,B)`, `pairedcohen(A,B)`).
@@ -44,7 +44,7 @@ Let's assume, we are interested in how our `X` and `Y` data relate directly to e
 - **Correlation**: We correlate each `X` with each `Y` using (partial) Spearman or Pearson correlations (`spearman`, `pearson`, `partialspearman`, `partialpearson`).
 - **Univariate regression**: We "predict" each `Y` from each `X` and retain the individually explained variance $R^2$ (`slr`).
 - **Multivariate regression**: We "predict" each `Y` from all `X` at once. We retain the overall explained variance, the predictorwise (`X`) beta coefficients and an approximation of the predictorwise contribution to the overall explained variance calculated as the difference between the total $R^2$ and the $R^2$ as obtained from all `X` without the predictor in question (`mlr`).
-- **Dominance analysis**: As in the multivariate regression but with the very nice feature that the exact individual contribution of each `X` to the overall explained variance is quantified. This is done by calculating all possible combinations of predictors and calculating summary metrics ("dominance statistics"). The computation time for this approach scales exponentially with the number of predictors. Going far beyong 15 predictors will be difficult here.
+- **Dominance analysis**: As in the multivariate regression but with the very nice feature that the exact individual contribution of each `X` to the overall explained variance is quantified. This is done by calculating all possible combinations of predictors and calculating summary metrics ("dominance statistics"). The computation time for this approach scales exponentially with the number of predictors. Going far beyond 15 predictors will be difficult here.
 
 ### 3. Significance 
 
@@ -57,7 +57,7 @@ To assign nonparametric and spatial autocorrelation-corrected p values to each "
 
 #### 3.2 Based on group permutation: `JuSpyce.permute_groups()`
 
-In accordance with the original JuSpace approach, we can also test whether the difference between two groups in the `Y` data is significantly associated to predictors in the `X` data by permuting the group labels and rerunning `JuSpyce.compare()` and `JuSpyce.predict()`. 
+In accordance with the original JuSpace approach, we can also test whether the difference between two groups in the `Y` data is significantly associated with predictors in the `X` data by permuting the group labels and rerunning `JuSpyce.compare()` and `JuSpyce.predict()`. 
 - Running this on, e.g., the parcelwise effect size between groups would answer a question related to the last point in 3.1, i.e., whether the spatial relation between the difference map of two groups and the predictors is stronger than would be assumed if the group allocation had no meaning.
 - Running this using the individual vectors of one group in relation to the parcelwise means of another (treated as "reference") would answer a comparable question but the subject-level values could be used for further follow-up analyses.
 
@@ -68,8 +68,8 @@ Empirical p values can be corrected by running `JuSpyce.correct_p()` either with
 ## Practical usage
 
 JuSpyce is in the development stage. There will be bugs - fell free to open an issue!  
-There is currently no documentation integrated in the code and non available elsewhere. Jupyter notebooks using the functionality refered to above, along with example data obtained from neuromaps and [Neuroquery](https://neuroquery.org/), are available in the [testing](/testing/) folder.  
-A thought out example case, detailed documentation with API references, pip-integration, and a paper will follow in time. I also plan to add integrated datasets, vizualisation functions, and I am aware that the code is a bit messy at the moment...
+There is currently no documentation integrated in the code and none available elsewhere. Jupyter notebooks using the functionality referred to above, along with example data obtained from neuromaps and [Neuroquery](https://neuroquery.org/), are available in the [testing](/testing/) folder.  
+A thought out example case, detailed documentation with API references, pip-integration, and a paper will follow in time. I also plan to add integrated datasets, visualization functions, and I am aware that the code is a bit messy at the moment...
 
 ### Simple example:
 
@@ -82,7 +82,7 @@ from juspyce.api import JuSpyce
 ## initialize
 juspyce_object = JuSpyce(
   x=predictor_list, # list of volumetric data, or df with shape(n_data, n_parcels)
-  y=target_list, # list of volemtric data or df with shape(n_data, n_parcels
+  y=target_list, # list of volumetric data or df with shape(n_data, n_parcels
   data_space="MNI152", # "MNI152", "fsaverage" or "fslr"
   parcellation=parcellation_volume, # used parcellation
   parcellation_labels=parcellation_volume_labels, # parcel labels as list
@@ -109,7 +109,7 @@ juspyce_object.permute_maps(
   n_perm=1000, # number of permutations (= number of null maps)
   r_to_z=True,
   n_proc=8, # number of processes
-  seed=41, # seed for reproducability
+  seed=41, # seed for reproducibility
 )
 print(juspyce_object.p_predictions["spearman"])
 
@@ -147,12 +147,24 @@ print(juspyce_object.p_comparisons["diff(A,mean(B))-spearman--fdr_bh"])
 - [juspyce.permute_maps()](/testing/test_5_juspyce.permute_maps.ipynb)
 - [juspyce.permute_groups()](/testing/test_6_juspyce.permute_groups.ipynb)
 
+### Note on the included "testing" nuclear imaging maps:
+
+The predictor brain maps in [`/testing/test_predictors`](/testing/test_predictors/) were downloaded via neuromaps and are subject to the a noncommercial-attribution license as are neuromaps and JuSpyce. Usage requires citation of the [neuromaps](https://doi.org/10.1101/2022.01.06.475081) paper, as well as of the original reports:
+[5-HT1b](https://doi.org/10.1038/jcbfm.2009.195),
+[5-HT2a](https://doi.org/10.1523/JNEUROSCI.2830-16.2016),
+[CBF & CMR-O2](https://doi.org/10.1073/pnas.1010459107), 
+[D2](https://doi.org/10.1016/j.neuroimage.2022.119149),
+[GABA-A](https://doi.org/10.1038/s41598-018-22444-0),
+[mGluR5](https://doi.org/10.1007/s00259-018-4252-4),
+[MU](https://doi.org/10.1016/j.neuroimage.2020.116922), and
+[NMDA](https://doi.org/10.1101/2021.12.04.21267226).
+
 ## Why this name?
 
 1. The origin of both JuSpace and JuSpyce is the Jülich Research Centre, Germany. Literally any stuff coming from there starts with "Ju". 
 2. JuSpace got its "Space" from focus on spatial correlations. 
 3. Things in Python have to have a "py" in the name. 
-4. People (that's me) have said that JuSpyce is a spyced up version of JuSpace.
+4. People (that's me) have said that JuSpyce is a spiced up version of JuSpace.
 5. Voilà: *JuSpyce*
 
 ## Contact

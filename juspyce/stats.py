@@ -286,7 +286,7 @@ def reduce_dimensions(data, method="pca", n_components=None, min_ev=None,
  
     # case fa
     elif method=="fa":
-        # find number of components wihtout rotation that sum up to total EV of >= min_ev
+        # find number of components without rotation that sum up to total EV of >= min_ev
         if min_ev is not None:
             fa = FactorAnalyzer(n_factors=n_components, method=fa_method, rotation=None)
             fa.fit(data)
@@ -502,7 +502,6 @@ def check_beta(x,y):
 
 def check_dominance(x,y, return_stats="Total Dominance"):
     import contextlib
-
     from dominance_analysis import Dominance
     X = pd.DataFrame(x, columns=[f"pred{i}" for i in range(x.shape[1])])
     Y = pd.Series(y, name="target")
