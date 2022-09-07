@@ -34,9 +34,11 @@ The data (`X` or `Y`) can be "transformed" in the following ways:
 #### 1.2 Data comparison: `JuSpyce.compare()`
 
 The `Y` data can be "compared" between predefined groups in the following ways. The idea for this is based on the JuSpace core functionality. We have to supply a group assignment vector (python list of nulls and ones).
-- **One group minus the mean of the other**: The difference between each vector of group A and the parcelwise means of group B (`diff(A,mean(B))`, `diff(B,mean(A))`).
+- **Individual difference**: The difference between the parcelwise values of group A and the parcelwise values of group B (`diff(A,B)`, `diff(B,A)`).
 - **Mean difference**: The difference between the parcelwise means of group A and the parcelwise means of group B (`diff(mean(A),mean(B))`).
 - **Effect sizes of the group difference**: The parcelwise effect sizes (Cohen's d, Hedge's g, paired Cohen's d) of group A compared with group B (`cohen(A,B)`, `hedge(A,B)`, `pairedcohen(A,B)`).
+- **One group minus the mean of the other**: The difference between each vector of group A and the parcelwise means of group B (`diff(A,mean(B))`, `diff(B,mean(A))`).
+- **One group relative to the other group as a "reference"**: The individual z-scores of each individual in group A relative to group B as: (A - mean(B)) / std(B) (`z(A,B)`, `z(B,A)`).
 
 ### 2. "Prediction": `JuSpyce.predict()`
 
@@ -59,7 +61,7 @@ To assign nonparametric and spatial autocorrelation-corrected p values to each "
 
 In accordance with the original JuSpace approach, we can also test whether the difference between two groups in the `Y` data is significantly associated with predictors in the `X` data by permuting the group labels and rerunning `JuSpyce.compare()` and `JuSpyce.predict()`. 
 - Running this on, e.g., the parcelwise effect size between groups would answer a question related to the last point in 3.1, i.e., whether the spatial relation between the difference map of two groups and the predictors is stronger than would be assumed if the group allocation had no meaning.
-- Running this using the individual vectors of one group in relation to the parcelwise means of another (treated as "reference") would answer a comparable question but the subject-level values could be used for further follow-up analyses.
+- Running this using the individual vectors of one group in relation to the parcelwise means of another (treated as "reference") or z scores of individual vectors of one group relative to the other group would answer a comparable question but the subject-level values could be used for further follow-up analyses. For these analyses, p values are by default based on the mean of the prediction values leading to one p-value per predictor.
 
 #### 3.3 Multiple comparison correction: `JuSpyce.correct_p()`
 
@@ -115,7 +117,7 @@ print(juspyce_object.p_predictions["spearman"])
 
 ## compare
 juspyce_object.compare(
-  comparison="diff(A,mean(B))", 
+  comparison="z(A,B)", # individual A's relative to B
   groups=group_list # list with zeros and ones assigning targets to two groups
 )
 print(juspyce_object.comparisons["diff(A,mean(B))"])
@@ -123,20 +125,21 @@ print(juspyce_object.comparisons["diff(A,mean(B))"])
 ## permute groups
 juspyce_object.permute_groups(
   groups=group_list,
-  comparison="diff(A,mean(B))" # difference between individual A and B
+  comparison="z(A,B)" # individual A's relative to B
   method="spearman", # which method
+  p_from_average_y=True, # if True, "mean", or "median", calc. p for average/median prediction values
   n_perm=1000, # number of permutations (= number of null maps)
   r_to_z=True,
   n_proc=8, n_proc_predict=1, seed=41
 )
-print(juspyce_object.p_comparisons["diff(A,mean(B))-spearman"])
+print(juspyce_object.p_comparisons["z(A,B)-spearman"])
 
 ## correct p values
 juspyce_object.correct_p(
   analysis="comparisons", # or "predictions"
   mc_method="fdr_bh" # correction method passed to statsmodels
 )
-print(juspyce_object.p_comparisons["diff(A,mean(B))-spearman--fdr_bh"])
+print(juspyce_object.p_comparisons["z(A,B)-spearman--fdr_bh"])
 ```
 ### Testing notebooks (with examples)
 

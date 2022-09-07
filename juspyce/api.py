@@ -83,6 +83,10 @@ class JuSpyce:
         else:
             self.zscore = standardize
         self._transform_count = 0
+        # basic prediction settings
+        self.r_to_z = True
+        self.adj_r2 = True
+        self.mlr_individual = True
         # empty data storage dicts
         self.transforms = dict()
         self.comparisons = dict()
@@ -304,21 +308,45 @@ class JuSpyce:
         
         # group variable
         if groups is None:
-            lgr.critical("For transform '{transform}' you must provide a grouping variable!")
+            lgr.critical("For comparisons, you must provide a grouping variable!")
         groups = np.array(groups)
         idc = np.sort(np.unique(groups))
         if len(idc) > 2:
             lgr.critical("Function not defined for > 2 grouping categories!", idc)
         if len(groups) != self.Y.shape[0]:
             lgr.critical(f"Length of 'groups' ({len(groups)}) does not match length of "
-                            f"Y data ({self.Y.shape[0]})!")
+                         f"Y data ({self.Y.shape[0]})!")
         # group dfs
         data_A = self.Y[groups==idc[0]]
-        data_B = self.Y[groups==idc[1]]   
+        data_B = self.Y[groups==idc[1]]
                 
-        # compare            
+        # compare      
+        ## case diff(A,B)
+        if comparison=="diff(A,B)":
+            if (len(groups[groups==idc[0]]) != len(groups[groups==idc[1]])):
+                lgr.critical(f"Group lengths must be equal for comparison=='diff(A,B)'!")
+            lgr.info("Subtracting subject- and parcelwise values of B from A: new Y = Y[A] - Y[B].")
+            data = np.subtract(data_A.values, data_B.values)
+            data_df = pd.DataFrame(
+                data=data, 
+                index=data_A.index, 
+                columns=data_A.columns, 
+                dtype=self._dtype)  
+            
+        ## case diff(B,A)
+        elif comparison=="diff(B,A)":
+            if (len(groups[groups==idc[0]]) != len(groups[groups==idc[1]])):
+                lgr.critical(f"Group lengths must be equal for comparison=='diff(B,A)'!")
+            lgr.info("Subtracting subject- and parcelwise values of A from B: new Y = Y[B] - Y[A].")
+            data = np.subtract(data_B.values, data_A.values)
+            data_df = pd.DataFrame(
+                data=data, 
+                index=data_B.index, 
+                columns=data_B.columns, 
+                dtype=self._dtype)  
+                  
         ## case diff(A,mean(B))
-        if comparison=="diff(A,mean(B))":
+        elif comparison=="diff(A,mean(B))":
             lgr.info("Subtracting parcelwise mean of B from A: new Y = Y[A] - mean(Y[B]).")
             data = data_A - np.nanmean(data_B, axis=0)
             data_df = pd.DataFrame(
@@ -347,7 +375,29 @@ class JuSpyce:
                 index=[comparison], 
                 columns=data_A.columns, 
                 dtype=self._dtype)
+            
+        ## case z(A,B)
+        elif comparison=="z(A,B)":
+            lgr.info("Calculating parcelwise z scores for A relative to B: "
+                     "new Y = (Y[A] - mean(Y[B])) / std(Y[B]).")
+            data = (data_A - np.nanmean(data_B, axis=0)) / np.nanstd(data_B, axis=0)
+            data_df = pd.DataFrame(
+                data=data, 
+                index=data_A.index, 
+                columns=data_A.columns, 
+                dtype=self._dtype)  
         
+        ## case z(B,A)
+        elif comparison=="z(B,A)":
+            lgr.info("Calculating parcelwise z scores for B relative to A: "
+                     "new Y = (Y[B] - mean(Y[A])) / std(Y[A]).")
+            data = (data_B - np.nanmean(data_A, axis=0)) / np.nanstd(data_A, axis=0)
+            data_df = pd.DataFrame(
+                data=data, 
+                index=data_B.index, 
+                columns=data_B.columns, 
+                dtype=self._dtype)  
+            
         # case cohen(A,B) / case hedge(A,B) / case pairedcohen(A,B)
         elif comparison in ["cohen(A,B)", "hedge(A,B)", "pairedcohen(A,B)"]:
             es = "cohen" if "cohen" in comparison else "hedges"
@@ -749,6 +799,7 @@ class JuSpyce:
 
     def permute_groups(self, method, comparison, groups,
                        n_perm=1000, 
+                       p_from_average_y=True,
                        p_tail="two",
                        r_to_z=None, adjust_r2=None, mlr_individual=None,
                        n_proc=None, n_proc_predict=1, seed=None,
@@ -766,14 +817,21 @@ class JuSpyce:
         mlr_individual = self.mlr_individual if mlr_individual is None else mlr_individual
         n_proc = self.n_proc if n_proc is None else n_proc
         
+        ## get method to combine predictions across y's
+        if p_from_average_y!=False:
+            if p_from_average_y!="median":
+                p_from_average_y = "mean"
+        
         ## get "true" comparison and prediction
         lgr.info(f"Running 'true' group comparison and prediction "
-                 f"(comparison = '{comparison}', method = '{method}').")
+                 f"(comparison = '{comparison}', method = '{method}'"
+                 f"{', using '+p_from_average_y+' of predictions' if p_from_average_y else ''}).")
         # comparison
         Yc_true = self.compare(
             comparison=comparison, 
             groups=groups, 
-            store=False, verbose=verbose)
+            store=False, 
+            verbose=verbose)
         # prediction
         prediction_true = self.predict(
             X=self.X,
@@ -786,7 +844,14 @@ class JuSpyce:
             store=False,
             verbose=verbose,
             n_proc=n_proc_predict)
-        
+        # get average prediction values of all y
+        if p_from_average_y!=False:
+            for m in prediction_true:
+                if p_from_average_y=="median":
+                    prediction_true[m] = np.nanmedian(prediction_true[m], axis=0)[np.newaxis,:]
+                else:
+                    prediction_true[m] = np.nanmean(prediction_true[m], axis=0)[np.newaxis,:]
+
         ## prepare null comparisons/predictions
         # get list of permuted group labels
         np.random.seed(seed)
@@ -809,11 +874,19 @@ class JuSpyce:
                 mlr_individual=mlr_individual,
                 store=False, verbose=False,
                 n_proc=n_proc_predict)
+            # get average prediction values of all y
+            if p_from_average_y!=False:
+                for m in prediction_null:
+                    if p_from_average_y=="median":
+                        prediction_null[m] = np.nanmedian(prediction_null[m], axis=0)[np.newaxis,:]
+                    else:
+                        prediction_null[m] = np.nanmean(prediction_null[m], axis=0)[np.newaxis,:]
             return prediction_null
         
         ## run null comparisons/predictions in parallel 
-        lgr.info(f"Running null comparisons and predictions (comparison = '{comparison}', "
-                 f"method = '{method}').")
+        lgr.info(f"Running null group comparisons and predictions "
+                 f"(comparison = '{comparison}', method = '{method}'"
+                 f"{', using '+p_from_average_y+' of predictions' if p_from_average_y else ''}).")
         null_predictions_list = Parallel(n_jobs=n_proc)(
             delayed(null_compare_predict)(g) for g in tqdm(
                 groups_null, 
@@ -834,7 +907,7 @@ class JuSpyce:
         lgr.info(f"Calculating exact p-values (tails = '{p_tail}').")
         # iterate methods
         p_data = dict()
-        for m in method_i:
+        for m in method_i: 
             p = np.zeros_like(prediction_true[m])
             # iterate predictors (columns)
             for x in range(p.shape[1]):
@@ -848,7 +921,8 @@ class JuSpyce:
             p_data[m] = pd.DataFrame(
                 data=p,
                 columns=self.X.index if "full_r2" not in m else [m],
-                index=Yc_true.index,
+                index=Yc_true.index if p_from_average_y is False else \
+                    [p_from_average_y+"-"+comparison],
                 dtype=self._dtype)
             
         ## save & return
