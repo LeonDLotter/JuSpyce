@@ -46,13 +46,13 @@ Let's assume, we are interested in how our `X` and `Y` data relate directly to e
 - **Correlation**: We correlate each `X` with each `Y` using (partial) Spearman or Pearson correlations (`spearman`, `pearson`, `partialspearman`, `partialpearson`).
 - **Univariate regression**: We "predict" each `Y` from each `X` and retain the individually explained variance $R^2$ (`slr`).
 - **Multivariate regression**: We "predict" each `Y` from all `X` at once. We retain the overall explained variance, the predictorwise (`X`) beta coefficients and an approximation of the predictorwise contribution to the overall explained variance calculated as the difference between the total $R^2$ and the $R^2$ as obtained from all `X` without the predictor in question (`mlr`).
-- **Dominance analysis**: As in the multivariate regression but with the very nice feature that the exact individual contribution of each `X` to the overall explained variance is quantified. This is done by calculating all possible combinations of predictors and calculating summary metrics ("dominance statistics"). The computation time for this approach scales exponentially with the number of predictors. Going far beyond 15 predictors will be difficult here.
+- **Dominance analysis**: As in the multivariate regression but with the very nice feature that the exact individual contribution of each `X` to the overall explained variance is quantified. This is done by calculating all possible combinations of predictors and calculating summary metrics ("dominance statistics"). The computation time for this approach scales exponentially with the number of predictors. Going far beyond 15 predictors will be difficult here. The JuSpyce code is based on the implementation in the [netneurotools](https://netneurotools.readthedocs.io).
 
 ### 3. Significance 
 
 #### 3.1 Based on spatial null maps: `JuSpyce.permute_maps()`
 
-To assign nonparametric and spatial autocorrelation-corrected p values to each "prediction metric" from the point above, we can generate surrogate ("null") maps and rerun `JuSpyce.predict()` on these to obtain null distributions corresponding to each "true" prediction metric. From these null distributions, empirical p values are then calculated. Null maps can be created for either `X` or `Y` data, or both at once. The typical approach would be to use the predictor data `X`. Concerning the input data, we can use:
+To assign nonparametric and spatial autocorrelation-corrected p values to each "prediction metric" from the point above, we can generate surrogate ("null") maps and rerun `JuSpyce.predict()` on these to obtain null distributions corresponding to each "true" prediction metric. From these null distributions, empirical p values are then calculated. The p-value-from-null-distribution function is adopted from [NiMARE](https://doi.org/10.5281/zenodo.6885551). Null maps can be created for either `X` or `Y` data, or both at once. The typical approach would be to use the predictor data `X`. Concerning the input data, we can use:
 - The "raw" `X` and `Y` input data
 - The "new" `X` data after, e.g., dimensionality reduction
 - The "new" `Y` data after, e.g., the parcelwise effect size between two defined groups has been calculated. This analysis would show us if the difference map between two groups can be "predicted" from our, e.g. PET data in comparison to predictor maps with similar spatial properties.
@@ -152,7 +152,7 @@ print(juspyce_object.p_comparisons["z(A,B)-spearman--fdr_bh"])
 
 ### Note on the included "testing" nuclear imaging maps:
 
-The predictor brain maps in [`/testing/test_predictors`](/testing/test_predictors/) were downloaded via neuromaps and are subject to the a noncommercial-attribution license as are neuromaps and JuSpyce. Usage requires citation of the [neuromaps](https://doi.org/10.1101/2022.01.06.475081) paper, as well as of the original reports:
+The predictor brain maps in [`/testing/test_predictors`](/testing/test_predictors/) were downloaded via neuromaps and are subject to the a noncommercial-attribution license as are neuromaps and JuSpyce. Usage requires citation of the [neuromaps](https://doi.org/10.1038/s41592-022-01625-w) paper, as well as of the original reports:
 [5-HT1b](https://doi.org/10.1038/jcbfm.2009.195),
 [5-HT2a](https://doi.org/10.1523/JNEUROSCI.2830-16.2016),
 [CBF & CMR-O2](https://doi.org/10.1073/pnas.1010459107), 
@@ -169,6 +169,14 @@ The predictor brain maps in [`/testing/test_predictors`](/testing/test_predictor
 3. Things in Python have to have a "py" in the name. 
 4. People (that's me) have said that JuSpyce is a spiced up version of JuSpace.
 5. Voilà: *JuSpyce*
+
+## What to cite?
+
+Please cite at least the following publications when you use JuSpyce in you work:
+- [Lotter & Dukart, 2022](https://doi.org/10.5281/zenodo.6884932)
+- [Dukart et al., 2021](https://doi.org/10.1038/s41592-022-01625-w)
+- [Markello, Hansen, et al., 2022](https://doi.org/10.1002/hbm.25244)
+- [Burt et al., 2020](https://doi.org/10.1016/j.neuroimage.2020.117038) (if you use the implemented null maps function)
 
 ## Contact
 

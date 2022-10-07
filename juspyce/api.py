@@ -635,7 +635,7 @@ class JuSpyce:
             mlr_individual=mlr_individual,
             store=False,
             verbose=verbose,
-            n_proc=n_proc_predict)
+            n_proc=n_proc)
 
         ## generate/ get null maps
         # case null maps given
@@ -644,7 +644,9 @@ class JuSpyce:
         # case null maps not given but existing
         elif (null_maps is None) & (use_null_maps==True):
             try:
-                null_maps = self.nulls["null_maps"]
+                permute, dist_mat, null_method, null_maps = \
+                    [self.nulls[k] for k in ["permute", "distance_matrix", "null_method", "null_maps"]]
+                lgr.info(f"Using existing null maps.")
             except:
                 lgr.info("No null maps found.")
         # case null maps not given & not existing
