@@ -310,15 +310,20 @@ class JuSpyce:
         if groups is None:
             lgr.critical("For comparisons, you must provide a grouping variable!")
         groups = np.array(groups)
-        idc = np.sort(np.unique(groups))
+        not_na = ~pd.Series(groups).isnull().values
+        if not not_na.all():
+            lgr.warning(f"Variable 'group' contains {(not_na==False).sum()} NaN values. "
+                        "These y data will be dropped.")
+        groups_nona = groups[not_na]
+        idc = np.sort(np.unique(groups_nona))
         if len(idc) > 2:
             lgr.critical("Function not defined for > 2 grouping categories!", idc)
         if len(groups) != self.Y.shape[0]:
             lgr.critical(f"Length of 'groups' ({len(groups)}) does not match length of "
                          f"Y data ({self.Y.shape[0]})!")
         # group dfs
-        data_A = self.Y[groups==idc[0]]
-        data_B = self.Y[groups==idc[1]]
+        data_A = self.Y[not_na][groups_nona==idc[0]]
+        data_B = self.Y[not_na][groups_nona==idc[1]]
                 
         # compare      
         ## case diff(A,B)
