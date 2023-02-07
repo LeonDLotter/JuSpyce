@@ -191,24 +191,27 @@ def generate_null_maps(data, parcellation, dist_mat=None,
     else:
         lgr.info(f"Using input distance matrix/matrices.")
         parc = None
-        if len(dist_mat)==1:
-            n_parcels = dist_mat[0].shape[0]
+        if isinstance(dist_mat, np.ndarray):
+            n_parcels = dist_mat.shape[0]
             if parc_space is None:
-                lgr.warning("Distance matrix provided but 'parc_space' is None: "
-                            "Assuming 'MNI152'!")
+                lgr.warning("Distance matrix provided as array but 'parc_space' is None: "
+                            "Assuming 'MNI152'! Define 'parc_space' if one surface hemisphere!")
                 parc_space = "MNI152"
-        else:
+        elif isinstance(dist_mat, tuple):
             n_parcels = (dist_mat[0].shape[0],
                          dist_mat[1].shape[0])     
             if parc_space is None:
-                lgr.warning("Distance matrix provided but 'parc_space' is None: "
+                lgr.warning("Distance matrix provided as tuple but 'parc_space' is None: "
                             "Assuming 'fsaverage'!")
                 parc_space = "fsaverage"
+        else:
+            lgr.critical("Distance matrix is wrong data type, should be array or tuple of arrays, "
+                         f"is: {type(dist_mat)}!")
       
     # check for problems          
     if np.sum(n_parcels)!=data.shape[1]:
         lgr.critical(f"Number of parcels in data (1. dimension, {data.shape[1]}) "
-                        f"does not match number of parcels in parcellation ({n_parcels})!")
+                     f"does not match number of parcels in parcellation ({n_parcels})!")
     
     ## generate null data
     nulls = dict()
