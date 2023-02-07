@@ -14,9 +14,10 @@ logging.basicConfig(level=logging.INFO)
 lgr = logging.getLogger(__name__)
 lgr.setLevel(logging.INFO)
 
+
 def get_distance_matrix(parc, parc_space, parc_hemi=["L", "R"], 
                         parc_density="10k", centroids=False, 
-                        n_cores=1, verbose=True):
+                        n_cores=1, verbose=True, dtype=np.float32):
     
     ## generate distance matrix
     # case volumetric 
@@ -37,9 +38,9 @@ def get_distance_matrix(parc, parc_space, parc_hemi=["L", "R"],
                 xyz[i,:] = np.column_stack(np.where(parc_data_m==i_parcel)).mean(axis=0)
             ijk = nib.affines.apply_affine(parc_affine, xyz)
             # get distances
-            dist = np.zeros((n_parcels, n_parcels), dtype='float32')
+            dist = np.zeros((n_parcels, n_parcels), dtype=dtype)
             for i, row in enumerate(ijk):
-                dist[i] = cdist(row[None], ijk).astype('float32')   
+                dist[i] = cdist(row[None], ijk).astype(dtype)   
             
         # case mean distances between parcel-wise voxels 
         else:
@@ -48,15 +49,21 @@ def get_distance_matrix(parc, parc_space, parc_hemi=["L", "R"],
             for i_parcel in parcels:
                 xyz_parcel = np.column_stack(np.where(parc_data_m==i_parcel))
                 ijk_parcels[i_parcel] = nib.affines.apply_affine(parc_affine, xyz_parcel)
-            # get distances for upper triangle of matrix
-            dist = np.zeros((n_parcels, n_parcels), dtype='float32')
-            for i, i_parcel in enumerate(tqdm(parcels, desc="Calculating distance matrix", 
-                                              disable=not verbose)):
+                
+            def mni_dist(i, i_parcel):
+                dist_i = np.zeros(n_parcels, dtype=dtype)
                 j = i
                 for _ in range(n_parcels - j):
-                    dist[i,j] = cdist(ijk_parcels[i_parcel], ijk_parcels[parcels[j]])\
-                        .mean().astype('float32')
+                    dist_i[j] = cdist(ijk_parcels[i_parcel], ijk_parcels[parcels[j]])\
+                        .mean().astype(dtype)
                     j += 1
+                return dist_i
+            
+            dist_list = Parallel(n_jobs=n_cores)(
+                delayed(mni_dist)(i, i_parcel) for i, i_parcel in enumerate(tqdm(
+                    parcels, 
+                    desc=f"Calculating distance matrix ({n_cores} proc)", disable=not verbose)))
+            dist = np.r_[dist_list]
             # mirror to lower triangle
             dist = dist + dist.T
             # zero diagonal
