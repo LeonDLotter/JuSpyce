@@ -1,7 +1,5 @@
 # <a name="top"></a>JuSpyce - a toolbox for flexible assessment of spatial associations between brain maps
 
-
-
 [![DOI](https://zenodo.org/badge/506986337.svg)](https://zenodo.org/badge/latestdoi/506986337)  
 [![License: CC BY-NC-SA 4.0](https://img.shields.io/badge/License-CC%20BY--NC--SA%204.0-lightgrey)](http://creativecommons.org/licenses/by-nc-sa/4.0/)  
 
@@ -72,7 +70,7 @@ Empirical p values can be corrected by running `JuSpyce.correct_p()` either with
 ## Practical usage
 
 JuSpyce is in the development stage. There will be bugs - fell free to open an issue!  
-There is currently no documentation integrated in the code and none available elsewhere. Jupyter notebooks using the functionality referred to above, along with example data obtained from neuromaps and [Neuroquery](https://neuroquery.org/), are available in the [testing](/testing/) folder.  
+There is currently no documentation integrated in the code and none available elsewhere. Jupyter notebooks using the functionality referred to above, along with example data obtained from neuromaps and [Neuroquery](https://neuroquery.org/), are available in the [testing](/testing/) folder. Aou may also want to take a look at [the first publication](https://doi.org/10.1016/j.neubiorev.2023.105042) in which we use the toolbox.  
 A thought out example case, detailed documentation with API references, pip-integration, and a paper will follow in time. I also plan to add integrated datasets, visualization functions, and I am aware that the code is a bit messy at the moment...
 
 ### Simple example:

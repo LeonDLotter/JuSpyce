@@ -161,7 +161,13 @@ class JuSpyce:
         if self.Z is not None:
             if self.X.shape[1]!=self.Z.shape[1]:
                 lgr.critical("Got differing numbers of parcels in 'x'/'y' & 'z' data!")
-                  
+        
+        ## check data indices
+        if all(self.X.columns != self.Y.columns):
+            lgr.warning("Parcel labels (column names) differ between 'x' and 'y' dataframes! "
+                        "Using 'x' labels for both.")
+            self.Y.columns = self.X.columns.copy()
+        
         ## deal with nan's
         self._nan_bool = pd.concat([self.X, self.Y, self.Z], axis=0).isnull().any(axis=0)
         # case remove nan parcels completely
