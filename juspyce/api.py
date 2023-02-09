@@ -156,17 +156,22 @@ class JuSpyce:
             self.Z = None
         
         ## check parcel number
-        if self.X.shape[1]!=self.Y.shape[1]:
+        if self.X.shape[1] != self.Y.shape[1]:
             lgr.critical("Got differing numbers of parcels in 'x' & 'y' data!")
         if self.Z is not None:
-            if self.X.shape[1]!=self.Z.shape[1]:
+            if self.X.shape[1] != self.Z.shape[1]:
                 lgr.critical("Got differing numbers of parcels in 'x'/'y' & 'z' data!")
         
         ## check data indices
         if all(self.X.columns != self.Y.columns):
-            lgr.warning("Parcel labels (column names) differ between 'x' and 'y' dataframes! "
+            lgr.warning("Parcel labels (column names) differ between 'x' & 'y' dataframes! "
                         "Using 'x' labels for both.")
             self.Y.columns = self.X.columns.copy()
+        if self.Z is not None:
+            if all(self.X.columns != self.Z.columns):
+                lgr.warning("Parcel labels (column names) differ between 'x'/'y' & 'z' dataframes! "
+                            "Using 'x' labels for both.")
+                self.Z.columns = self.X.columns.copy()
         
         ## deal with nan's
         self._nan_bool = pd.concat([self.X, self.Y, self.Z], axis=0).isnull().any(axis=0)
@@ -772,6 +777,15 @@ class JuSpyce:
                 p_tail = {method:"upper"}
             else:
                 p_tail = {method:"two"}
+        else:
+            if not all([m in p_tail for m in method_i]):
+                lgr.error("If 'p_tail' dict is provided, it must contain one entry for each "
+                          f"prediction metric ({method_i}), you provided: {p_tail}!")
+            tails = [tail for tail in [p_tail[k] for k in p_tail]]
+            if any([tail not in ["two", "upper", "lower"] for tail in tails]):
+                lgr.error("Provided 'p_tail' values can only be one of ['two', 'upper', 'lower'], "
+                          f"you provided: {tails}!")
+            
         lgr.info(f"Calculating exact p-values (tails = '{p_tail}').")
         # iterate methods
         p_data = dict()
@@ -988,20 +1002,26 @@ class JuSpyce:
               
     # ==============================================================================================
 
-    def to_pickle(self, filepath, verbose=True):
+    def to_pickle(self, filepath, save_nulls=True, verbose=True):
         set_log(verbose)
         
         ext = os.path.splitext(filepath)[1]
+        
+        # remove nulls (very large depending on number of permutations) if requested
+        self_save = self.copy()
+        if save_nulls == False:
+            self_save.nulls = dict()
+            
         # compressed
         if ext==".gz":
             with gzip.open(filepath, "wb") as f:
-                pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
+                pickle.dump(self_save, f, pickle.HIGHEST_PROTOCOL)
             if verbose: 
                 lgr.info(f"Saved complete gzip compressed object to {filepath}.")
         # uncompressed
         elif ext in [".pkl", ".pickle"]:
             with open(filepath, "wb") as f:
-                pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
+                pickle.dump(self_save, f, pickle.HIGHEST_PROTOCOL)
             if verbose: 
                 lgr.info(f"Saved complete uncompressed object to {filepath}.")
         else:

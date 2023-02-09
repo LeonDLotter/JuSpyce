@@ -126,7 +126,7 @@ def beta(x, y, r2=False, adj_r2=True):
             return beta[:-1].flatten(), r2
     
 
-def residuals(x, y):
+def residuals(x, y, decenter=False):
     """Compute residuals for Regression of predictor(s) x on target y. 
     Requires numpy arrays with columns as predictors/target.
 
@@ -135,12 +135,15 @@ def residuals(x, y):
         y (numpy.ndarray): shape (n_values, 1) or (n_values,)
 
     Returns:
-        numpy.ndarray: 1D array of residuals
+        numpy.ndarray: 1D array of residuals w or w/o added mean of y
     """
     X = np.c_[x, np.ones(x.shape[0])] 
     beta = np.linalg.pinv((X.T).dot(X)).dot(X.T.dot(y))
     y_hat = np.dot(X, beta)
-    return y - y_hat
+    if decenter:
+        return y.mean() + y - y_hat
+    else:
+        return y - y_hat
 
 
 def dominance(x, y, adj_r2=False, verbose=True):
