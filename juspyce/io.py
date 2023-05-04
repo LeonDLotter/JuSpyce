@@ -8,8 +8,13 @@ from joblib import Parallel, delayed
 from neuromaps import images, parcellate
 from tqdm.auto import tqdm
 
+from .utils import set_log
+
+
+logging.basicConfig(level=logging.INFO)
 lgr = logging.getLogger(__name__)
 lgr.setLevel(logging.INFO)
+
 
 def get_input_data(data, 
                    data_labels=None,
@@ -22,6 +27,7 @@ def get_input_data(data,
                    dtype=None,
                    n_proc=1,
                    verbose=True):
+    verbose = set_log(lgr, verbose)
     
     ## case list
     if isinstance(data, list):
@@ -129,7 +135,7 @@ def get_input_data(data,
         lgr.critical(f"Can't import from data with type {type(data)}!")
         
     ## check for nan's
-    if df_parc.isnull().any(None):
+    if df_parc.isnull().any(axis=None):
         lgr.warning("Data contains nan's! Will be excluded on case-wise basis.")
  
     ## return data array

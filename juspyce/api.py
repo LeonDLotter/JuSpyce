@@ -16,22 +16,12 @@ from .io import get_input_data
 from .nulls import generate_null_maps
 from .stats import (beta, corr, dominance, mc_correction, null_to_p,
                     partialcorr3, r2, reduce_dimensions, residuals, zscore_df)
-from .utils import fill_nan
+from .utils import fill_nan, set_log
 
 logging.basicConfig(level=logging.INFO)
 lgr = logging.getLogger(__name__)
-def set_log(verbose):
-    if verbose==True:
-        lgr.setLevel(logging.INFO)
-        return True
-    elif verbose==False:
-        lgr.setLevel(logging.CRITICAL)
-        return False
-    else:
-        lgr.setLevel(verbose)
-        return True
+
         
-            
 class JuSpyce:
     """Class JuSpyce
     """   
@@ -98,7 +88,7 @@ class JuSpyce:
     # ==============================================================================================
     
     def fit(self, verbose=True):
-        verbose = set_log(verbose)
+        verbose = set_log(lgr, verbose)
         
         ## extract input data
         # predictors -> usually e.g. PET atlases
@@ -215,7 +205,7 @@ class JuSpyce:
                   dataset="X", replace=False,
                   n_components=None, min_ev=None, fa_method="minres", fa_rotation="promax",
                   seed=None, store=True, verbose=True):
-        verbose = set_log(verbose)
+        verbose = set_log(lgr, verbose)
         
         ## check if fit was run
         if not (hasattr(self, "X") | hasattr(self, "Y")):
@@ -311,7 +301,7 @@ class JuSpyce:
     
     def compare(self, comparison, groups,
                 store=True, replace=False, verbose=True):
-        verbose = set_log(verbose)
+        verbose = set_log(lgr, verbose)
         
         ## check if fit was run
         if not (hasattr(self, "X") | hasattr(self, "Y")):
@@ -334,11 +324,22 @@ class JuSpyce:
                          f"Y data ({self.Y.shape[0]})!")
         # group dfs
         data_A = self.Y[not_na][groups_nona==idc[0]]
-        data_B = self.Y[not_na][groups_nona==idc[1]]
+        if comparison!="subset":
+            data_B = self.Y[not_na][groups_nona==idc[1]]
                 
-        # compare      
+        # compare 
+        ## case subset
+        if comparison=="subset":
+            lgr.info("Subsetting Y: new Y = Y[A]")
+            data = data_A 
+            data_df = pd.DataFrame(
+                data=data, 
+                index=data_A.index, 
+                columns=data_A.columns, 
+                dtype=self._dtype)       
+                 
         ## case diff(A,B)
-        if comparison=="diff(A,B)":
+        elif comparison=="diff(A,B)":
             if (len(groups[groups==idc[0]]) != len(groups[groups==idc[1]])):
                 lgr.critical(f"Group lengths must be equal for comparison=='diff(A,B)'!")
             lgr.info("Subtracting subject- and parcelwise values of B from A: new Y = Y[A] - Y[B].")
@@ -414,7 +415,7 @@ class JuSpyce:
                 columns=data_B.columns, 
                 dtype=self._dtype)  
             
-        # case cohen(A,B) / case hedge(A,B) / case pairedcohen(A,B)
+        ## case cohen(A,B) / case hedge(A,B) / case pairedcohen(A,B)
         elif comparison in ["cohen(A,B)", "hedge(A,B)", "pairedcohen(A,B)"]:
             es = "cohen" if "cohen" in comparison else "hedges"
             pair = True if "paired" in comparison else False
@@ -455,7 +456,7 @@ class JuSpyce:
                 r_to_z=True, 
                 adjust_r2=True, mlr_individual=True,
                 store=True, verbose=True, n_proc=None):
-        verbose = set_log(verbose)
+        verbose = set_log(lgr, verbose)
         
         ## check if fit was run
         if not (hasattr(self, "X") | hasattr(self, "Y")):
@@ -522,23 +523,28 @@ class JuSpyce:
                     predictions[x] = r2(
                         x=X.iloc[x:x+1,no_nan].values.T, # atlas
                         y=Y.iloc[y:y+1,no_nan].values.T, # subject
-                        adj_r2=self.adj_r2)
+                        adj_r2=self.adj_r2
+                    )
             ## case mlr
             elif method=="mlr":
                 predictions = dict()
-                predictions["beta"], predictions["full_r2"] = beta(
+                predictions["beta"], predictions["full_r2"], predictions["intercept"] = beta(
                     x=X.values[:,no_nan].T, # atlases
                     y=Y.iloc[y:y+1,no_nan].values.T, # subject      
                     r2=True,
-                    adj_r2=self.adj_r2) 
+                    adj_r2=self.adj_r2,
+                    intercept=True
+                ) 
                 if mlr_individual:  
                     predictions["individual"] = np.zeros_like(
-                        predictions["beta"], dtype=self._dtype)
+                        predictions["beta"], dtype=self._dtype
+                    )
                     for x in range(self.X.shape[0]):
                         predictions["individual"][x] = r2(
                             x=np.delete(X.values, x, axis=0)[:,no_nan].T, # atlases
                             y=Y.iloc[y:y+1,no_nan].values.T, # subject
-                            adj_r2=self.adj_r2)      
+                            adj_r2=self.adj_r2
+                        )      
                     predictions["individual"] = predictions["full_r2"] - predictions["individual"]
             ## case dominance
             elif method=="dominance":
@@ -546,7 +552,8 @@ class JuSpyce:
                     x=X.values[:,no_nan].T, # atlases
                     y=Y.iloc[y:y+1,no_nan].values.T, # subject   
                     adj_r2=self.adj_r2,
-                    verbose=True if verbose=="debug" else False) # dict with dom stats
+                    verbose=True if verbose=="debug" else False
+                ) # dict with dom stats
             ## case not defined
             else:
                 lgr.critical(f"Prediction method '{method}' not defined!")
@@ -571,15 +578,18 @@ class JuSpyce:
                 predictions["dominance_total"], axis=1)[:,np.newaxis]
         # MLR: dict with one array per stat
         elif method=="mlr":
-            predictions["mlr_beta"] = np.zeros(
-                (Y.shape[0], X.shape[0]), dtype=self._dtype)
+            predictions["mlr_beta"] = np.zeros((Y.shape[0], X.shape[0]), dtype=self._dtype)
+            predictions["mlr_intercept"] = np.zeros((Y.shape[0],1), dtype=self._dtype)
             predictions["mlr_full_r2"] = np.zeros((Y.shape[0],1), dtype=self._dtype)
             if mlr_individual: 
                 predictions["mlr_individual"] = np.zeros_like(
-                    predictions["mlr_beta"], dtype=self._dtype)
+                    predictions["mlr_beta"], dtype=self._dtype
+                )
             for y, prediction in enumerate(predictions_list):
                 predictions["mlr_beta"][y,:] = prediction["beta"]
-                if mlr_individual: predictions["mlr_individual"][y,:] = prediction["individual"]
+                predictions["mlr_intercept"][y,:] = prediction["intercept"]
+                if mlr_individual: 
+                    predictions["mlr_individual"][y,:] = prediction["individual"]
                 predictions["mlr_full_r2"][y] = prediction["full_r2"]
         # all others: one array
         else:
@@ -594,7 +604,7 @@ class JuSpyce:
                 for stat in predictions:
                     self.predictions[comparison+stat] = pd.DataFrame(
                         data=predictions[stat], 
-                        columns=X.index if not stat.endswith("full_r2") else [stat], 
+                        columns=X.index if not (stat.endswith("full_r2") | stat.endswith("intercept")) else [stat], 
                         index=Y.index,
                         dtype=self._dtype) 
             else:
@@ -616,10 +626,10 @@ class JuSpyce:
                      null_method="variogram", dist_mat=None, n_perm=1000, 
                      parcellation=None, parc_space=None, parc_hemi=None, centroids=False,
                      r_to_z=None, adjust_r2=None, mlr_individual=None,
-                     p_tail=None,
+                     p_tail=None, p_from_average_y=False,
                      n_proc=None, n_proc_predict=1, seed=None,
                      verbose=True, store=True):
-        verbose = set_log(verbose)
+        verbose = set_log(lgr, verbose)
         
         ## check if fit was run
         if not (hasattr(self, "X") | hasattr(self, "Y")):
@@ -641,8 +651,14 @@ class JuSpyce:
         mlr_individual = self.mlr_individual if mlr_individual is None else mlr_individual
         n_proc = self.n_proc if n_proc is None else n_proc
         
+        ## get method to combine predictions across y's
+        if p_from_average_y!=False:
+            if p_from_average_y!="median":
+                p_from_average_y = "mean"
+                
         ## get "true" prediction
-        lgr.info(f"Running 'true' prediction (method = '{method}').")
+        lgr.info(f"Running 'true' prediction (method = '{method}'"
+                 f"{', using '+p_from_average_y+' of predictions' if p_from_average_y else ''}).")
         prediction_true = self.predict(
             method=method,
             comparison=comparison,
@@ -652,6 +668,13 @@ class JuSpyce:
             store=False,
             verbose=verbose,
             n_proc=n_proc)
+        # get average prediction values of all y
+        if p_from_average_y!=False:
+            for m in prediction_true:
+                if p_from_average_y=="median":
+                    prediction_true[m] = np.nanmedian(prediction_true[m], axis=0)[np.newaxis,:]
+                else:
+                    prediction_true[m] = np.nanmean(prediction_true[m], axis=0)[np.newaxis,:]
 
         ## generate/ get null maps
         # case null maps given
@@ -746,6 +769,13 @@ class JuSpyce:
                     store=False,
                     verbose=False,
                     n_proc=n_proc_predict)
+            # get average prediction values of all y
+            if p_from_average_y!=False:
+                for m in null_prediction:
+                    if p_from_average_y=="median":
+                        null_prediction[m] = np.nanmedian(null_prediction[m], axis=0)[np.newaxis,:]
+                    else:
+                        null_prediction[m] = np.nanmean(null_prediction[m], axis=0)[np.newaxis,:]
             # return for collection
             return null_prediction
         
@@ -771,6 +801,7 @@ class JuSpyce:
                 p_tail = {m:"upper" for m in method_i}
             elif method=="mlr":
                 p_tail = {method+"_beta":"two", 
+                          method+"_intercept":"two",
                           method+"_full_r2":"upper", 
                           method+"_individual":"upper"}
             elif method=="slr":
@@ -786,7 +817,7 @@ class JuSpyce:
                 lgr.error("Provided 'p_tail' values can only be one of ['two', 'upper', 'lower'], "
                           f"you provided: {tails}!")
             
-        lgr.info(f"Calculating exact p-values (tails = '{p_tail}').")
+        lgr.info(f"Calculating exact p-values (tails = {p_tail}).")
         # iterate methods
         p_data = dict()
         for m in method_i:
@@ -802,8 +833,11 @@ class JuSpyce:
             # collect data
             p_data[m] = pd.DataFrame(
                 data=p,
-                columns=self.X.index if "full_r2" not in m else [m],
-                index=self.Y.index if comparison is None else self.comparisons[comparison].index,                
+                #columns=self.X.index if "full_r2" not in m else [m],
+                columns=self.X.index if not (m.endswith("full_r2") | m.endswith("intercept")) else [m], 
+                index=self.Y.index if (comparison is None) & (p_from_average_y == False) \
+                    else self.comparisons[comparison].index if p_from_average_y == False \
+                    else [p_from_average_y],  
                 dtype=self._dtype)
             
         ## save & return
@@ -827,11 +861,11 @@ class JuSpyce:
     def permute_groups(self, method, comparison, groups,
                        n_perm=1000, 
                        p_from_average_y=True,
-                       p_tail="two",
+                       p_tail=None,
                        r_to_z=None, adjust_r2=None, mlr_individual=None,
                        n_proc=None, n_proc_predict=1, seed=None,
                        verbose=True, store=True):
-        verbose = set_log(verbose)
+        verbose = set_log(lgr, verbose)
         
         ## check if fit was run
         if not (hasattr(self, "X") | hasattr(self, "Y")):
@@ -925,13 +959,32 @@ class JuSpyce:
         
         ## get p values from null distributions
         # make method iterable and define p-tails:
-        if method=="dominance":
-            method_i = [k for k in prediction_true if k.startswith("dominance")] 
-        elif method=="mlr":
-            method_i = [k for k in prediction_true if k.startswith("mlr")] 
+        if method in ["dominance", "mlr"]:
+            method_i = [k for k in prediction_true if k.startswith(method)] 
         else:
             method_i = [method]
-        lgr.info(f"Calculating exact p-values (tails = '{p_tail}').")
+        # define p tails
+        if p_tail is None:
+            if method=="dominance":
+                p_tail = {m:"upper" for m in method_i}
+            elif method=="mlr":
+                p_tail = {method+"_beta":"two", 
+                          method+"_full_r2":"upper", 
+                          method+"_individual":"upper"}
+            elif method=="slr":
+                p_tail = {method:"upper"}
+            else:
+                p_tail = {method:"two"}
+        else:
+            if not all([m in p_tail for m in method_i]):
+                lgr.error("If 'p_tail' dict is provided, it must contain one entry for each "
+                          f"prediction metric ({method_i}), you provided: {p_tail}!")
+            tails = [tail for tail in [p_tail[k] for k in p_tail]]
+            if any([tail not in ["two", "upper", "lower"] for tail in tails]):
+                lgr.error("Provided 'p_tail' values can only be one of ['two', 'upper', 'lower'], "
+                          f"you provided: {tails}!")
+            
+        lgr.info(f"Calculating exact p-values (tails = {p_tail}).")
         # iterate methods
         p_data = dict()
         for m in method_i: 
@@ -943,7 +996,7 @@ class JuSpyce:
                     true_pred = prediction_true[m][y,x]
                     null_pred = [null_predictions[i][m][y,x] for i in range(n_perm)]
                     # get p value
-                    p[y,x] = null_to_p(true_pred, null_pred, tail=p_tail)
+                    p[y,x] = null_to_p(true_pred, null_pred, tail=p_tail[m])
             # collect data
             p_data[m] = pd.DataFrame(
                 data=p,
@@ -1003,7 +1056,7 @@ class JuSpyce:
     # ==============================================================================================
 
     def to_pickle(self, filepath, save_nulls=True, verbose=True):
-        set_log(verbose)
+        set_log(lgr, verbose)
         
         ext = os.path.splitext(filepath)[1]
         
@@ -1030,7 +1083,7 @@ class JuSpyce:
     # ==============================================================================================
 
     def copy(self, deep=True, verbose=True):
-        set_log(verbose)
+        set_log(lgr, verbose)
         
         lgr.info(f"Creating{' deep ' if deep else ' '}copy of JuSpyce object.")
         if deep==True:
@@ -1042,7 +1095,7 @@ class JuSpyce:
 
     @staticmethod 
     def from_pickle(filepath, verbose=True):
-        set_log(verbose)
+        set_log(lgr, verbose)
         
         ext = os.path.splitext(filepath)[1]
         # compressed

@@ -98,7 +98,7 @@ def r2(x, y, adj_r2=True):
         return r2
     
     
-def beta(x, y, r2=False, adj_r2=True):
+def beta(x, y, r2=False, adj_r2=True, intercept=False):
     """Compute beta coefficients for Regression of predictor(s) x on target y. 
     Requires numpy arrays with columns as predictors/target.
 
@@ -112,18 +112,24 @@ def beta(x, y, r2=False, adj_r2=True):
     
     X = np.c_[x, np.ones(x.shape[0])] 
     beta = np.linalg.pinv((X.T).dot(X)).dot(X.T.dot(y))
-    if r2==False:
-        return beta[:-1].flatten()
-    else:
+
+    returns = (beta[:-1].flatten(),)
+    
+    if r2:
         y_hat = np.dot(X, beta)
         ss_res = np.sum((y-y_hat)**2)       
         ss_tot = np.sum((y-np.mean(y))**2)   
         r2 = 1 - ss_res / ss_tot  
         if adj_r2:
             r2a = 1 - (1-r2) * (len(y)-1) / (len(y)-x.shape[1]-1)
-            return beta[:-1].flatten(), r2a
+            returns += (r2a,)
         else:
-            return beta[:-1].flatten(), r2
+            returns += (r2,)
+            
+    if intercept:
+        returns += (beta[-1:][0],)
+        
+    return returns
     
 
 def residuals(x, y, decenter=False):
@@ -501,7 +507,7 @@ def check_slr(x,y, adj_r2=True):
 def check_beta(x,y):
     import statsmodels.api as sm
     mlr = sm.OLS(y, sm.add_constant(x), missing="drop").fit()
-    return mlr.params[1:]
+    return mlr.params
 
 def check_dominance(x,y, return_stats="Total Dominance"):
     import contextlib

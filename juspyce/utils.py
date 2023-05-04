@@ -1,6 +1,19 @@
 import numpy as np
 import pandas as pd
+import logging
 
+
+def set_log(lgr, verbose):
+    if verbose==True:
+        lgr.setLevel(logging.INFO)
+        return True
+    elif verbose==False:
+        lgr.setLevel(logging.CRITICAL)
+        return False
+    else:
+        lgr.setLevel(verbose)
+        return True
+    
 def remove_nan(data, which="col"):
     
     if isinstance(data, np.ndarray):

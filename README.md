@@ -172,7 +172,7 @@ The predictor brain maps in [`/testing/test_predictors`](/testing/test_predictor
 
 ## What to cite?
 
-Please cite at least the following publications when you use JuSpyce in you work:
+Please cite at least the following publications when you use JuSpyce in your work:
 - [Lotter & Dukart, 2022](https://doi.org/10.5281/zenodo.6884932)
 - [Dukart et al., 2021](https://doi.org/10.1002/hbm.25244)
 - [Markello, Hansen, et al., 2022](https://doi.org/10.1038/s41592-022-01625-w)

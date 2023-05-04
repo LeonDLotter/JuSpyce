@@ -10,6 +10,8 @@ from neuromaps.nulls.nulls import _get_distmat
 from scipy.spatial.distance import cdist
 from tqdm.auto import tqdm
 
+from .utils import fill_nan, set_log
+
 logging.basicConfig(level=logging.INFO)
 lgr = logging.getLogger(__name__)
 lgr.setLevel(logging.INFO)
@@ -18,6 +20,7 @@ lgr.setLevel(logging.INFO)
 def get_distance_matrix(parc, parc_space, parc_hemi=["L", "R"], 
                         parc_density="10k", centroids=False, 
                         n_cores=1, verbose=True, dtype=np.float32):
+    verbose = set_log(lgr, verbose)
     
     ## generate distance matrix
     # case volumetric 
@@ -100,6 +103,7 @@ def generate_null_maps(data, parcellation, dist_mat=None,
                        parc_space=None, parc_hemi=None, parc_density=None, 
                        n_nulls=1000, centroids=False,
                        n_cores=1, seed=None, verbose=True):
+    verbose = set_log(lgr, verbose)
     
     ## input data
     if not isinstance(data, (pd.DataFrame, pd.Series, np.ndarray)):
