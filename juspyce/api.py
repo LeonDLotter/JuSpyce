@@ -299,7 +299,7 @@ class JuSpyce:
         
     # ==============================================================================================
     
-    def compare(self, comparison, groups,
+    def compare(self, comparison, groups, 
                 store=True, replace=False, verbose=True):
         verbose = set_log(lgr, verbose)
         
@@ -892,7 +892,8 @@ class JuSpyce:
             comparison=comparison, 
             groups=groups, 
             store=False, 
-            verbose=verbose)
+            verbose=verbose
+        )
         # prediction
         prediction_true = self.predict(
             X=self.X,
@@ -904,7 +905,8 @@ class JuSpyce:
             mlr_individual=mlr_individual,
             store=False,
             verbose=verbose,
-            n_proc=n_proc_predict)
+            n_proc=n_proc_predict
+        )
         # get average prediction values of all y
         if p_from_average_y!=False:
             for m in prediction_true:
@@ -969,6 +971,7 @@ class JuSpyce:
                 p_tail = {m:"upper" for m in method_i}
             elif method=="mlr":
                 p_tail = {method+"_beta":"two", 
+                          method+"_intercept":"two",
                           method+"_full_r2":"upper", 
                           method+"_individual":"upper"}
             elif method=="slr":
@@ -1000,7 +1003,7 @@ class JuSpyce:
             # collect data
             p_data[m] = pd.DataFrame(
                 data=p,
-                columns=self.X.index if "full_r2" not in m else [m],
+                columns=self.X.index if not (m.endswith("full_r2") | m.endswith("intercept")) else [m], 
                 index=Yc_true.index if p_from_average_y is False else \
                     [p_from_average_y+"-"+comparison],
                 dtype=self._dtype)
