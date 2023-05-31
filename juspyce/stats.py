@@ -4,7 +4,7 @@ from itertools import combinations
 import numpy as np
 import pandas as pd
 from factor_analyzer import FactorAnalyzer
-from scipy.stats import rankdata, zscore
+from scipy.stats import rankdata, zscore, norm
 from sklearn.decomposition import PCA, FastICA
 from statsmodels.stats.multitest import multipletests
 from tqdm.auto import tqdm
@@ -332,10 +332,10 @@ def reduce_dimensions(data, method="pca", n_components=None, min_ev=None,
     return components, ev, loadings
 
 
-def null_to_p(test_value, null_array, tail="two", symmetric=False):
+def null_to_p(test_value, null_array, tail="two", fit_norm=False):
     """Return p-value for test value(s) against null array.
     
-    Copied from NiMARE v0.0.12: https://zenodo.org/record/6600700
+    Adopted from NiMARE v0.0.12: https://zenodo.org/record/6600700
     (NiMARE/nimare/stats.py)
     
     Parameters
@@ -350,12 +350,10 @@ def null_to_p(test_value, null_array, tail="two", symmetric=False):
         If 'upper', then higher values for the test_value are more significant.
         If 'lower', then lower values for the test_value are more significant.
         Default is 'two'.
-    symmetric : bool
-        When tail="two", indicates how to compute p-values. When False (default),
-        both one-tailed p-values are computed, and the two-tailed p is double
-        the minimum one-tailed p. When True, it is assumed that the null
-        distribution is zero-centered and symmetric, and the two-tailed p-value
-        is computed as P(abs(test_value) >= abs(null_array)).
+    fit_norm : boolean
+        Whether to fit a normal distribution to null_array data and compute p values from that.
+        Might be useful if the relative order of multiple highly significant p values is of
+        interest, but the number of null values cannot be increased sufficiently.
     
     Returns
     -------
@@ -366,11 +364,8 @@ def null_to_p(test_value, null_array, tail="two", symmetric=False):
     
     Notes
     -----
-    P-values are clipped based on the number of elements in the null array.
-    Therefore no p-values of 0 or 1 should be produced.
-    When the null distribution is known to be symmetric and centered on zero,
-    and two-tailed p-values are desired, use symmetric=True, as it is
-    approximately twice as efficient computationally, and has lower variance.
+    P-values are clipped based on the number of elements in the null array, if fit_norm=False.
+    In this case, no p-values of 0 or 1 should be produced.
     """
     
     if tail not in {"two", "upper", "lower"}:
@@ -380,38 +375,34 @@ def null_to_p(test_value, null_array, tail="two", symmetric=False):
     test_value = np.atleast_1d(test_value)
     null_array = np.array(null_array)
 
-    # For efficiency's sake, if there are more than 1000 values, pass only the unique
-    # values through percentileofscore(), and then reconstruct.
-    if len(test_value) > 1000:
-        reconstruct = True
-        test_value, uniq_idx = np.unique(test_value, return_inverse=True)
-    else:
-        reconstruct = False
-
-    def compute_p(t, null):
-        null = np.sort(null)
-        idx = np.searchsorted(null, t, side="left").astype(float)
-        return 1 - idx / len(null)
-
+    ## empirical p value
+    if not fit_norm:
+        def compute_p(t, null):
+            null = np.sort(null)
+            idx = np.searchsorted(null, t, side="left").astype(float)
+            return 1 - idx / len(null)
+    
+    ## fit a normal distribution and get p value
+    elif fit_norm:
+        def compute_p(t, null):
+            mu, sd = norm.fit(null)
+            return 1 - norm.cdf(t, mu, sd)
+            
+    ## calculate p
     if tail == "two":
-        if symmetric:
-            p = compute_p(np.abs(test_value), np.abs(null_array))
-        else:
-            p_l = compute_p(test_value, null_array)
-            p_r = compute_p(test_value * -1, null_array * -1)
-            p = 2 * np.minimum(p_l, p_r)
+        p_l = compute_p(test_value, null_array)
+        p_r = compute_p(test_value * -1, null_array * -1)
+        p = 2 * np.minimum(p_l, p_r)
     elif tail == "lower":
         p = compute_p(test_value * -1, null_array * -1)
-    else:
+    elif tail == "upper":
         p = compute_p(test_value, null_array)
 
     # ensure p_value in the following range:
-    # smallest_value <= p_value <= (1.0 - smallest_value)
-    smallest_value = np.maximum(np.finfo(float).eps, 1.0 / len(null_array))
-    result = np.maximum(smallest_value, np.minimum(p, 1.0 - smallest_value))
-
-    if reconstruct:
-        result = result[uniq_idx]
+    # smallest_value <= p_value <= (1.0 - smallest_value) or 1 if fit_norm
+    smallest_value = np.maximum(np.finfo(float).eps, 1.0 / len(null_array)) if not fit_norm else 0
+    largest_value = 1 - smallest_value
+    result = np.clip(p, a_min=smallest_value, a_max=largest_value)
 
     return result[0] if return_first else result
 

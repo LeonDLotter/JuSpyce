@@ -822,6 +822,7 @@ class JuSpyce:
         p_data = dict()
         for m in method_i:
             p = np.zeros(prediction_true[m].shape, dtype=self._dtype)
+            p_norm = p.copy()
             # iterate predictors (columns)
             for x in range(p.shape[1]):
                 # iterate targets (rows)
@@ -829,7 +830,8 @@ class JuSpyce:
                     true_pred = prediction_true[m][y,x]
                     null_pred = [null_predictions[i][m][y,x] for i in range(n_perm)]
                     # get p value
-                    p[y,x] = null_to_p(true_pred, null_pred, tail=p_tail[m])
+                    p[y,x] = null_to_p(true_pred, null_pred, tail=p_tail[m], fit_norm=False)
+                    p_norm[y,x] = null_to_p(true_pred, null_pred, tail=p_tail[m], fit_norm=True)
             # collect data
             p_data[m] = pd.DataFrame(
                 data=p,
@@ -838,7 +840,14 @@ class JuSpyce:
                 index=self.Y.index if (comparison is None) & (p_from_average_y == False) \
                     else self.comparisons[comparison].index if p_from_average_y == False \
                     else [p_from_average_y],  
-                dtype=self._dtype)
+                dtype=self._dtype
+            )
+            p_data[m+"-norm"] = pd.DataFrame(
+                data=p_norm,
+                columns=p_data[m].columns, 
+                index=p_data[m].index,  
+                dtype=self._dtype
+            )
             
         ## save & return
         if store:    
@@ -936,7 +945,8 @@ class JuSpyce:
                 r_to_z=r_to_z,
                 mlr_individual=mlr_individual,
                 store=False, verbose=False,
-                n_proc=n_proc_predict)
+                n_proc=n_proc_predict
+            )
             # get average prediction values of all y
             if p_from_average_y!=False:
                 for m in prediction_null:
@@ -992,6 +1002,7 @@ class JuSpyce:
         p_data = dict()
         for m in method_i: 
             p = np.zeros_like(prediction_true[m])
+            p_norm = p.copy()
             # iterate predictors (columns)
             for x in range(p.shape[1]):
                 # iterate targets (rows)
@@ -999,14 +1010,22 @@ class JuSpyce:
                     true_pred = prediction_true[m][y,x]
                     null_pred = [null_predictions[i][m][y,x] for i in range(n_perm)]
                     # get p value
-                    p[y,x] = null_to_p(true_pred, null_pred, tail=p_tail[m])
+                    p[y,x] = null_to_p(true_pred, null_pred, tail=p_tail[m], fit_norm=False)
+                    p_norm[y,x] = null_to_p(true_pred, null_pred, tail=p_tail[m], fit_norm=True)
             # collect data
             p_data[m] = pd.DataFrame(
                 data=p,
                 columns=self.X.index if not (m.endswith("full_r2") | m.endswith("intercept")) else [m], 
                 index=Yc_true.index if p_from_average_y is False else \
                     [p_from_average_y+"-"+comparison],
-                dtype=self._dtype)
+                dtype=self._dtype
+            )
+            p_data[m+"-norm"] = pd.DataFrame(
+                data=p_norm,
+                columns=p_data[m].columns, 
+                index=p_data[m].index,  
+                dtype=self._dtype
+            )
             
         ## save & return
         if store:    
@@ -1047,7 +1066,8 @@ class JuSpyce:
                 alpha=mc_alpha, 
                 method=mc_method, 
                 how=how, 
-                dtype=self._dtype)
+                dtype=self._dtype
+            )
         # save and return
         if store:
             if analysis=="predictions":

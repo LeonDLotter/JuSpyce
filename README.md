@@ -52,7 +52,7 @@ Let's assume, we are interested in how our `X` and `Y` data relate directly to e
 
 #### 3.1 Based on spatial null maps: `JuSpyce.permute_maps()`
 
-To assign nonparametric and spatial autocorrelation-corrected p values to each "prediction metric" from the point above, we can generate surrogate ("null") maps and rerun `JuSpyce.predict()` on these to obtain null distributions corresponding to each "true" prediction metric. From these null distributions, empirical p values are then calculated. The p-value-from-null-distribution function is adopted from [NiMARE](https://doi.org/10.5281/zenodo.6885551). Null maps can be created for either `X` or `Y` data, or both at once. The typical approach would be to use the predictor data `X`. Concerning the input data, we can use:
+To assign nonparametric and spatial autocorrelation-corrected p values to each "prediction metric" from the point above, we can generate surrogate ("null") maps and rerun `JuSpyce.predict()` on these to obtain null distributions corresponding to each "true" prediction metric. From these null distributions, exact p values are calculated. The p-value-from-null-distribution function is adopted from [NiMARE](https://doi.org/10.5281/zenodo.6885551). In addition to these exact p values, p values are calculated from Gaussian distributions fitted to each null distribution. The latter is useful for cases where we might want to rank results based on p values (as often done in genetics) but, due to highly significant results and computation time constraints, can't do that with exact p values (see [Fulcher et al., 2021](https://doi.org/10.1038/s41467-021-22862-1)). Depending on the case, multiple comparison correction (esp. FDR, see below) might also turn out differencly. Null maps can be created for either `X` or `Y` data, or both at once. The typical approach would be to use the predictor data `X`. Concerning the input data, we can use:
 - The "raw" `X` and `Y` input data
 - The "new" `X` data after, e.g., dimensionality reduction
 - The "new" `Y` data after, e.g., the parcelwise effect size between two defined groups has been calculated. This analysis would show us if the difference map between two groups can be "predicted" from our, e.g. PET data in comparison to predictor maps with similar spatial properties.
@@ -113,7 +113,8 @@ juspyce_object.permute_maps(
   n_proc=8, # number of processes
   seed=41, # seed for reproducibility
 )
-print(juspyce_object.p_predictions["spearman"])
+print(juspyce_object.p_predictions["spearman"]) # these are the exact p values
+print(juspyce_object.p_predictions["spearman-norm"]) # p values calculated from Gaussian distributions
 
 ## compare
 juspyce_object.compare(
@@ -132,15 +133,18 @@ juspyce_object.permute_groups(
   r_to_z=True,
   n_proc=8, n_proc_predict=1, seed=41
 )
-print(juspyce_object.p_comparisons["z(A,B)-spearman"])
+print(juspyce_object.p_comparisons["z(A,B)-spearman"]) # exact p values
+print(juspyce_object.p_comparisons["z(A,B)-spearman-norm"]) # "Gaussian" p values
 
 ## correct p values
 juspyce_object.correct_p(
   analysis="comparisons", # or "predictions"
   mc_method="fdr_bh" # correction method passed to statsmodels
 )
-print(juspyce_object.p_comparisons["z(A,B)-spearman--fdr_bh"])
+print(juspyce_object.p_comparisons["z(A,B)-spearman--fdr_bh"]) # FDR-corrected exact p values
+print(juspyce_object.p_comparisons["z(A,B)-spearman-norm--fdr_bh"]) # FDR-corrected "Gaussian" p values
 ```
+
 ### Testing notebooks (with examples)
 
 - [juspyce.fit()](/testing/test_1_juspyce.fit.ipynb)
