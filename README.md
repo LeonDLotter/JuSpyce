@@ -14,7 +14,7 @@ The [neuromaps](https://netneurolab.github.io/neuromaps/) toolbox integrates sev
 
 ## JuSpyce
 
-*JuSpyce* is an advanced Python script version of the Matlab-based [JuSpace](https://github.com/juryxy/JuSpace) toolbox. The concept is based on the toolboxes mentioned above with the following line of thought. 
+*JuSpyce* is an advanced Python api version of the Matlab-based [JuSpace](https://github.com/juryxy/JuSpace) toolbox. The concept is based on the toolboxes mentioned above with the following line of thought. 
 
 ### 1. The data: `JuSpyce.fit()`
 
@@ -70,8 +70,8 @@ Empirical p values can be corrected by running `JuSpyce.correct_p()` either with
 ## Practical usage
 
 JuSpyce is in the development stage. There will be bugs - fell free to open an issue!  
-There is currently no documentation integrated in the code and none available elsewhere. Jupyter notebooks using the functionality referred to above, along with example data obtained from neuromaps and [Neuroquery](https://neuroquery.org/), are available in the [testing](/testing/) folder. Aou may also want to take a look at [the first publication](https://doi.org/10.1016/j.neubiorev.2023.105042) in which we use the toolbox.  
-A thought out example case, detailed documentation with API references, pip-integration, and a paper will follow in time. I also plan to add integrated datasets, visualization functions, and I am aware that the code is a bit messy at the moment...
+There is currently no documentation integrated in the code and none available elsewhere. Jupyter notebooks using the functionality referred to above, along with example data obtained from neuromaps and [Neuroquery](https://neuroquery.org/), are available in the [testing](/testing/) folder. You may also want to take a look at our recent publications using the toolbox: [Lotter, ... Konrad et al., 2022](https://doi.org/10.1016/j.neubiorev.2023.105042), [Lotter, ... Dukart et al., 2023](https://doi.org/10.1101/2023.05.05.539537 ), and [Chechko, ... Lotter et al., 2023](https://doi.org/10.1101/2023.08.15.553345).  
+A sensible example case, detailed documentation with API references, pipy-integration, and a paper will follow in time. I also plan to add integrated datasets, visualization functions, and I am aware that the code is a bit messy at the moment...
 
 ### Simple example:
 
@@ -84,7 +84,7 @@ from juspyce.api import JuSpyce
 ## initialize
 juspyce_object = JuSpyce(
   x=predictor_list, # list of volumetric data, or df with shape(n_data, n_parcels)
-  y=target_list, # list of volumetric data or df with shape(n_data, n_parcels
+  y=target_list, # list of volumetric data or df with shape(n_data, n_parcels)
   data_space="MNI152", # "MNI152", "fsaverage" or "fslr"
   parcellation=parcellation_volume, # used parcellation
   parcellation_labels=parcellation_volume_labels, # parcel labels as list

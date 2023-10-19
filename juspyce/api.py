@@ -104,7 +104,8 @@ class JuSpyce:
             resampling_target=self.resampl_targ,
             n_proc=self.n_proc,
             verbose=verbose,
-            dtype=self._dtype)
+            dtype=self._dtype
+        )
         lgr.info(f"Got 'x' data for {self.X.shape[0]} x {self.X.shape[1]} parcels.")
         # targets -> usually e.g. subject data or group-level outcome data
         lgr.info("Checking input data for y (should be, e.g., subject data):")
@@ -119,7 +120,8 @@ class JuSpyce:
             resampling_target=self.resampl_targ,
             n_proc=self.n_proc,
             verbose=verbose,
-            dtype=self._dtype)
+            dtype=self._dtype
+        )
         lgr.info(f"Got 'y' data for {self.Y.shape[0]} x {self.Y.shape[1]} parcels.")
         # data to control correlations for
         if self.z is not None:
@@ -140,7 +142,8 @@ class JuSpyce:
                 resampling_target=self.resampl_targ,
                 n_proc=self.n_proc,
                 verbose=verbose,
-                dtype=self._dtype)
+                dtype=self._dtype
+            )
             lgr.info(f"Got 'z' data for {self.Z.shape[0]} x {self.Z.shape[1]} parcels.")
         else:
             self.Z = None
@@ -223,7 +226,8 @@ class JuSpyce:
                 data=data[np.newaxis,:], 
                 index=[transform], 
                 columns=data_orig.columns, 
-                dtype=self._dtype)   
+                dtype=self._dtype
+            )   
         
         ## case partial
         elif transform=="partial":
