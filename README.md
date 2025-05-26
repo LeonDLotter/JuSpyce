@@ -5,6 +5,16 @@
 
 ---
 
+## DEPRICATION NOTICE
+
+:exclamation:  
+This repository is no longer maintained because JuSpyce has been succeeded by [NiSpace](https://github.com/leondlotter/nispace).  
+The code and functionality described below has been more or less completely migrated, with many features and datasets being significantly improved. Please do not use this repository for new projects.  
+:exclamation: 
+
+---
+---
+
 *Spatial (alteration) patterns observed in MRI images may often reflect function and dysfunction of underlying biological systems. This applies alike to function and structure, on the surface or in the volumetric space, to typical activation patterns, or to maps of disordered brain function, for example obtained from patients compared to a reference cohort.*
 
 To date, there are several toolboxes targeting the question how brain images obtained from fMRI on the one hand and, e.g., nuclear imaging on the other can be related to another.  
@@ -70,7 +80,7 @@ Empirical p values can be corrected by running `JuSpyce.correct_p()` either with
 ## Practical usage
 
 JuSpyce is in the development stage. There will be bugs - fell free to open an issue!  
-There is currently no documentation integrated in the code and none available elsewhere. Jupyter notebooks using the functionality referred to above, along with example data obtained from neuromaps and [Neuroquery](https://neuroquery.org/), are available in the [testing](/testing/) folder. You may also want to take a look at our recent publications using the toolbox: [Lotter, ... Konrad et al., 2022](https://doi.org/10.1016/j.neubiorev.2023.105042), [Lotter, ... Dukart et al., 2023](https://doi.org/10.1101/2023.05.05.539537 ), and [Chechko, ... Lotter et al., 2023](https://doi.org/10.1101/2023.08.15.553345).  
+There is currently no documentation integrated in the code and none available elsewhere. Jupyter notebooks using the functionality referred to above, along with example data obtained from neuromaps and [Neuroquery](https://neuroquery.org/), are available in the [testing](/testing/) folder. You may also want to take a look at our recent publications using the toolbox: [Lotter, ... Konrad et al., 2023](https://doi.org/10.1016/j.neubiorev.2023.105042), [Lotter, ... Dukart et al., 2023](https://doi.org/10.1101/2023.05.05.539537 ), and [Chechko, ... Lotter et al., 2023](https://doi.org/10.1101/2023.08.15.553345).  
 A sensible example case, detailed documentation with API references, pipy-integration, and a paper will follow in time. I also plan to add integrated datasets, visualization functions, and I am aware that the code is a bit messy at the moment...
 
 ### Simple example:

@@ -10,7 +10,7 @@ def get_template(template="T1", resolution=2, threshold=None):
             temp = nl.datasets.load_mni152_gm_mask(resolution=resolution, threshold=threshold)
             
     ## case MNI152 T1 template or brainmask
-    elif template ["T1", "mask", "brainmask"]:
+    elif template in ["T1", "mask", "brainmask"]:
         if threshold is None:
             temp = nl.datasets.load_mni152_template(resolution=resolution)
         else:
